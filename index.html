@@ -8,7 +8,7 @@ body{margin:0;font-family:system-ui;background:#0b1220;color:#eef2f7}header{padd
 <section id="players" class="tab"><div class="card"><h2>Player Ratings</h2><div id="summary" class="muted">Load a match first.</div></div><div class="card"><div id="ptable"></div></div></section>
 <section id="graphics" class="tab"><div class="card"><h2>YouTube Graphic</h2><div class="row"><button onclick="graphic('score')">Score</button><button onclick="graphic('players')">Player of Match</button><button onclick="graphic('defence')">Defence</button><button onclick="save()">Download PNG</button></div><canvas id="cv" width="1280" height="720" style="width:100%;margin-top:12px"></canvas></div></section>
 <script>
-const RAW='https://raw.githubusercontent.com/seanyboi/rugbydata/main/data/v3/';
+const RAW='https://raw.githubusercontent.com/RuckMeSideways/ruck-me-sideways/main/data/v3/';
 const aliases={'springboks':'South Africa','boks':'South Africa','rsa':'South Africa','all blacks':'New Zealand','allblacks':'New Zealand','wallabies':'Australia','pumas':'Argentina','los pumas':'Argentina','les bleus':'France'};
 let current=null,players=[];
 const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
