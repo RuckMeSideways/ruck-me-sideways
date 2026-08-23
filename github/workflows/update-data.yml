@@ -1,4 +1,3 @@
-# Place this file at: .github/workflows/update-data.yml
 name: Update rugby data
 
 on:
