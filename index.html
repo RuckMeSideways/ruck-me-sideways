@@ -1,7 +1,7 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b1220"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v14</title><style>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b1220"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v15</title><style>
 body{margin:0;font-family:system-ui;background:#0b1220;color:#eef2f7}header{padding:16px;background:#111b2e}h1{margin:0;font-size:23px}.sub{color:#aab7ca;font-size:12px}nav{display:flex;gap:7px;overflow:auto;padding:9px;background:#0f1727;position:sticky;top:0}button{border:0;border-radius:9px;padding:10px 13px;background:#1f6feb;color:white;font-weight:700}.tab{display:none;max-width:1100px;margin:auto;padding:14px}.tab.active{display:block}.card{background:#121d30;border:1px solid #293850;border-radius:14px;padding:14px;margin-bottom:12px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px}input,select{background:#0b1220;color:white;border:1px solid #3a4962;border-radius:8px;padding:10px;width:100%;box-sizing:border-box}.field{display:flex;flex-direction:column;gap:5px}.field label,.muted{color:#aab7ca}.row{display:flex;gap:8px;flex-wrap:wrap}.result{padding:12px;border:1px solid #293850;border-radius:10px;margin:8px 0}.score{text-align:center;font-size:34px;font-weight:800}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px;border-bottom:1px solid #293850;text-align:left}th{color:#aab7ca}.rating{font-size:26px;font-weight:800}.badge{display:inline-block;padding:4px 7px;border-radius:999px;background:#4b3b0a;font-size:11px}
 </style></head><body>
-<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v14 · Proper Rugby Match Search & Analysis · all teams</div></header>
+<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v15 · Proper Rugby Match Search & Analysis · all teams</div></header>
 <nav>
 <button type="button" data-tab="search">🔎 Find Match</button>
 <button type="button" data-tab="analysis">📊 Analysis</button>
@@ -20,7 +20,7 @@ body{margin:0;font-family:system-ui;background:#0b1220;color:#eef2f7}header{padd
 <div id="teams" class="card"><span class="muted">Enter a team name.</span></div>
 <div id="matches" class="card" style="display:none"></div>
 </section>
-<section id="analysis" class="tab"><div class="card"><h2 id="title">No match loaded</h2><div id="meta" class="muted"></div><div id="score" class="score">—</div><div class="row" style="margin-top:10px;justify-content:center"><button type="button" id="btnSwap">⇄ Swap Sides</button></div><div id="swapNote" class="muted" style="text-align:center;margin-top:6px;font-size:12px"></div></div><div id="stats"></div></section>
+<section id="analysis" class="tab"><div class="card"><h2 id="title">No match loaded</h2><div id="meta" class="muted"></div><div id="score" class="score">—</div><div class="row" style="margin-top:10px;justify-content:center"><button type="button" id="btnSwapNames">⇄ Swap Names</button><button type="button" id="btnSwapScore">⇄ Swap Score</button><button type="button" id="btnSwapStats">⇄ Swap Stats</button></div><div class="muted" style="text-align:center;margin-top:6px;font-size:11px">If a match's team names, score, or stats are mixed up in the source data, use these to fix just the part that's wrong.</div><div id="swapNote" class="muted" style="text-align:center;margin-top:6px;font-size:12px"></div></div><div id="stats"></div></section>
 <section id="players" class="tab"><div class="card"><h2>Player Ratings</h2><div id="summary" class="muted">Load a match first.</div></div><div class="card"><div id="ptable"></div></div></section>
 <section id="graphics" class="tab"><div class="card"><h2>YouTube Graphic</h2><div class="row"><button type="button" id="btnGScore">Score</button><button type="button" id="btnGPlayers">Player of Match</button><button type="button" id="btnGDefence">Defence</button><button type="button" id="btnSave">Download PNG</button></div><canvas id="cv" width="1280" height="720" style="width:100%;margin-top:12px"></canvas></div></section>
 <script>
@@ -120,17 +120,23 @@ function rating(p){let s=5;if(p.tackles!=null)s+=Math.min(2.5,p.tackles/12);if(p
 // columns are actually present, rather than a hardcoded list.
 const SKIP_KEYS=new Set(['team','team_id','team_vs','team_vs_id','match_id','game_date','competition_id','players','score','team_vs_score']);
 function statLabel(k){return k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())}
-function swapSides(){
+function swapNames(){
  if(!current)return;
- current={
-  home_team:current.away_team,away_team:current.home_team,
-  date:current.date,competition:current.competition,
-  home_score:current.away_score,away_score:current.home_score,
-  home:current.away,away:current.home,
-  players:current.players
- };
+ let t=current.home_team;current.home_team=current.away_team;current.away_team=t;
  render();
- document.getElementById('swapNote').textContent='Sides swapped manually — tap again to undo.';
+ document.getElementById('swapNote').textContent='Names swapped manually.';
+}
+function swapScore(){
+ if(!current)return;
+ let s=current.home_score;current.home_score=current.away_score;current.away_score=s;
+ render();
+ document.getElementById('swapNote').textContent='Score swapped manually.';
+}
+function swapStats(){
+ if(!current)return;
+ let s=current.home;current.home=current.away;current.away=s;
+ render();
+ document.getElementById('swapNote').textContent='Stats columns swapped manually.';
 }
 
 function render(){
@@ -145,7 +151,7 @@ function render(){
 }
 function renderPlayers(){if(!players.length){document.getElementById('summary').innerHTML='No player-level data supplied.';document.getElementById('ptable').innerHTML='';return}let s=players.map(p=>({...p,r:rating(p)})).sort((a,b)=>b.r-a.r),top=s[0];document.getElementById('summary').innerHTML='<div class="rating">'+esc(top.name)+' — '+top.r.toFixed(1)+'/10</div><span class="badge">Calculated RMS rating</span>';document.getElementById('ptable').innerHTML='<table><tr><th>Player</th><th>Team</th><th>Tackles</th><th>Metres</th><th>TO won</th><th>Rating</th></tr>'+s.map(p=>'<tr><td>'+esc(p.name)+'</td><td>'+esc(p.team)+'</td><td>'+(p.tackles??'—')+'</td><td>'+(p.metres??'—')+'</td><td>'+(p.turnovers_won??'—')+'</td><td><b>'+p.r.toFixed(1)+'</b></td></tr>').join('')+'</table>'}
 function graphic(type){let c=document.getElementById('cv'),x=c.getContext('2d');x.fillStyle='#0b1220';x.fillRect(0,0,1280,720);x.fillStyle='#fff';x.font='bold 42px system-ui';x.fillText('RUCK ME SIDEWAYS',70,80);if(!current){x.fillText('Load a match first',70,160);return}x.font='bold 48px system-ui';x.fillText(current.home_team+' '+(current.home_score??'—')+' – '+(current.away_score??'—')+' '+current.away_team,70,180);x.font='32px system-ui';x.fillText(type==='players'&&players.length?'PLAYER OF THE MATCH':type==='defence'?'DEFENCE BATTLE':'FINAL SCORE',70,330);if(type==='players'&&players.length){let p=players.slice().sort((a,b)=>rating(b)-rating(a))[0];x.font='bold 54px system-ui';x.fillText(p.name+' · '+rating(p).toFixed(1)+'/10',70,410)}else{x.font='30px system-ui';x.fillText('Tackles: '+(current.home?.tackles??'—')+' vs '+(current.away?.tackles??'—'),70,400);x.fillText('Territory: '+(current.home?.territory??'—')+' vs '+(current.away?.territory??'—'),70,450)}}
-function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v14.png';a.href=document.getElementById('cv').toDataURL();a.click()}
+function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v15.png';a.href=document.getElementById('cv').toDataURL();a.click()}
 
 // ---- wiring: everything below binds events with addEventListener instead
 // of inline onclick, including a single delegated listener for buttons
@@ -156,7 +162,9 @@ document.getElementById('btnGScore').addEventListener('click',()=>graphic('score
 document.getElementById('btnGPlayers').addEventListener('click',()=>graphic('players'));
 document.getElementById('btnGDefence').addEventListener('click',()=>graphic('defence'));
 document.getElementById('btnSave').addEventListener('click',save);
-document.getElementById('btnSwap').addEventListener('click',swapSides);
+document.getElementById('btnSwapNames').addEventListener('click',swapNames);
+document.getElementById('btnSwapScore').addEventListener('click',swapScore);
+document.getElementById('btnSwapStats').addEventListener('click',swapStats);
 document.querySelectorAll('nav [data-tab]').forEach(btn=>btn.addEventListener('click',()=>tab(btn.dataset.tab)));
 
 document.body.addEventListener('click',function(e){
