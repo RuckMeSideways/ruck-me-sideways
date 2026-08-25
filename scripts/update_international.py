@@ -21,13 +21,11 @@ BASE = "https://v1.rugby.api-sports.io"
 HEADERS = {"x-apisports-key": API_KEY}
 
 DATA_DIR = Path("data/international")
-GAME_STATS_DIR = DATA_DIR / "game-stats"
 
 # One call per name here, so keep this list short - each one costs a
 # request against the 100/day free quota.
 LEAGUE_SEARCHES = ["Six Nations", "Rugby Championship", "Autumn Nations Series", "Rugby World Cup"]
 SEASONS = [2022, 2023, 2024, 2025, 2026]
-MAX_NEW_GAME_STATS_PER_RUN = 60
 REQUEST_PAUSE_SECONDS = 0.5
 
 
@@ -94,23 +92,6 @@ def main():
                 teams[tid] = tname
     save_json(DATA_DIR / "teams.json", [{"id": k, "name": v} for k, v in teams.items()])
     print(f"Derived {len(teams)} team(s) from games")
-
-    print("Fetching new game stats (incremental)...")
-    existing_ids = set()
-    if GAME_STATS_DIR.exists():
-        existing_ids = {p.stem for p in GAME_STATS_DIR.glob("*.json")}
-    all_ids = [str(g["id"]) for g in all_games if g.get("id")]
-    pending_ids = [gid for gid in all_ids if gid not in existing_ids]
-    new_ids = pending_ids[:MAX_NEW_GAME_STATS_PER_RUN]
-    print(f"  {len(pending_ids)} pending, fetching {len(new_ids)} this run")
-
-    for gid in new_ids:
-        try:
-            stats = api_get("games/statistics/teams", {"id": gid})
-            save_json(GAME_STATS_DIR / f"{gid}.json", stats)
-        except Exception as e:
-            print(f"  ! failed fetching stats for game {gid}: {e}")
-        time.sleep(REQUEST_PAUSE_SECONDS)
 
     print("Done.")
 
