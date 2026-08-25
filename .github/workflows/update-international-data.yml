@@ -1,11 +1,12 @@
 # Place this file at: .github/workflows/update-international-data.yml
-# Requires a repo secret named APISPORTS_KEY (Settings > Secrets and
-# variables > Actions > New repository secret).
+# Requires a repo secret named HIGHLIGHTLY_KEY (Settings > Secrets and
+# variables > Actions > New repository secret) - a RapidAPI key for the
+# "Rugby Highlights API" by Highlightly.
 name: Update international rugby data
 
 on:
   schedule:
-    - cron: '30 5 * * 1'   # weekly, Monday 05:30 UTC - keeps well within the 100 req/day free quota
+    - cron: '45 5 * * *'   # daily, 05:45 UTC - the free plan's 1000/hour throttle makes daily comfortable
   workflow_dispatch: {}     # lets you trigger it manually from the Actions tab
 
 permissions:
@@ -28,7 +29,7 @@ jobs:
 
       - name: Fetch international rugby data
         env:
-          APISPORTS_KEY: ${{ secrets.APISPORTS_KEY }}
+          HIGHLIGHTLY_KEY: ${{ secrets.HIGHLIGHTLY_KEY }}
         run: python scripts/update_international.py
 
       - name: Commit and push if changed
