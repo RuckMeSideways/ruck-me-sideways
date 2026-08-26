@@ -1,7 +1,7 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b1220"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v16</title><style>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b1220"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v17</title><style>
 body{margin:0;font-family:system-ui;background:#0b1220;color:#eef2f7}header{padding:16px;background:#111b2e}h1{margin:0;font-size:23px}.sub{color:#aab7ca;font-size:12px}nav{display:flex;gap:7px;overflow:auto;padding:9px;background:#0f1727;position:sticky;top:0}button{border:0;border-radius:9px;padding:10px 13px;background:#1f6feb;color:white;font-weight:700}.tab{display:none;max-width:1100px;margin:auto;padding:14px}.tab.active{display:block}.card{background:#121d30;border:1px solid #293850;border-radius:14px;padding:14px;margin-bottom:12px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px}input,select{background:#0b1220;color:white;border:1px solid #3a4962;border-radius:8px;padding:10px;width:100%;box-sizing:border-box}.field{display:flex;flex-direction:column;gap:5px}.field label,.muted{color:#aab7ca}.row{display:flex;gap:8px;flex-wrap:wrap}.result{padding:12px;border:1px solid #293850;border-radius:10px;margin:8px 0}.score{text-align:center;font-size:34px;font-weight:800}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px;border-bottom:1px solid #293850;text-align:left}th{color:#aab7ca}.rating{font-size:26px;font-weight:800}.badge{display:inline-block;padding:4px 7px;border-radius:999px;background:#4b3b0a;font-size:11px}
 </style></head><body>
-<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v16 · Proper Rugby Match Search & Analysis · all teams</div></header>
+<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v17 · Proper Rugby Match Search & Analysis · all teams</div></header>
 <nav>
 <button type="button" data-tab="search">🔎 Find Match</button>
 <button type="button" data-tab="analysis">📊 Analysis</button>
@@ -9,7 +9,7 @@ body{margin:0;font-family:system-ui;background:#0b1220;color:#eef2f7}header{padd
 <button type="button" data-tab="graphics">🎥 Graphics</button>
 </nav>
 <section id="search" class="tab active">
-<div class="card"><h2>Find a Match</h2><p class="muted">Searches your own data bridge's team registry (all 250+ teams the rugbypy package tracks). Nicknames such as Springboks are resolved to the official team name.</p>
+<div class="card"><h2>Find a Match</h2><p class="muted">Searches club rugby (your rugbypy data bridge) and international rugby (Six Nations, Rugby Championship, Super Rugby, via Highlightly) together. Nicknames such as Springboks are resolved to the official team name.</p>
 <div class="grid">
 <div class="field"><label>Team / nickname</label><input id="q" placeholder="South Africa, Springboks, Leicester..."></div>
 <div class="field"><label>Season</label><select id="season"><option value="">Any</option><option>2026</option><option>2025</option><option>2024</option><option>2023</option><option>2022</option></select></div>
@@ -26,18 +26,23 @@ body{margin:0;font-family:system-ui;background:#0b1220;color:#eef2f7}header{padd
 <script>
 // ---- point this at YOUR data bridge repo (see .github/workflows/update-data.yml) ----
 const RAW='https://raw.githubusercontent.com/RuckMeSideways/ruck-me-sideways/main/data/';
+const RAW_INTL='https://raw.githubusercontent.com/RuckMeSideways/ruck-me-sideways/main/data/international/';
 
 const aliases={'springboks':'South Africa','boks':'South Africa','rsa':'South Africa','all blacks':'New Zealand','allblacks':'New Zealand','wallabies':'Australia','pumas':'Argentina','los pumas':'Argentina','les bleus':'France'};
-let TEAMS=null, COMPS=null, current=null, players=[], teamStatsCache={};
+let TEAMS=null, COMPS=null, INTL_TEAMS=null, INTL_MATCHES=null, current=null, players=[], teamStatsCache={};
 const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
 const get=async u=>{let r=await fetch(u);if(!r.ok)throw Error(r.status+' fetching '+u);return r.json()};
 const tab=id=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.getElementById(id).classList.add('active')};
-const fmt=d=>{let s=String(d||'');return s.length===8?s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6):s};
+const fmt=d=>{let s=String(d||'');if(s.includes('T'))return s.slice(0,10);return s.length===8?s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6):s};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 async function loadRegistries(){
  if(!TEAMS) TEAMS=await get(RAW+'teams.json');
  if(!COMPS) COMPS=await get(RAW+'competitions.json');
+}
+async function loadIntlRegistries(){
+ if(!INTL_TEAMS) INTL_TEAMS=await get(RAW_INTL+'teams.json');
+ if(!INTL_MATCHES) INTL_MATCHES=await get(RAW_INTL+'matches.json');
 }
 function compName(id){let c=COMPS&&COMPS.find(x=>x.competition_id===id);return c?c.competition_name:(id||'')}
 
@@ -47,27 +52,37 @@ async function search(){
  let box=document.getElementById('teams');box.innerHTML='<b>Searching team registry…</b>';
  try{
   await loadRegistries();
+  await loadIntlRegistries().catch(()=>{/* international bridge may not have run yet - club search still works */});
   let canonical=aliases[q]||raw.trim();
   let cq=norm(canonical);
-  let hits=TEAMS.filter(t=>norm(t.team_name).includes(cq)||norm(t.team_name).includes(q));
+  let clubHits=(TEAMS||[]).filter(t=>norm(t.team_name).includes(cq)||norm(t.team_name).includes(q))
+   .map(t=>({source:'club',id:t.team_id,name:t.team_name}));
+  let intlHits=(INTL_TEAMS||[]).filter(t=>norm(t.name).includes(cq)||norm(t.name).includes(q))
+   .map(t=>({source:'intl',id:t.id,name:t.name}));
+  let hits=clubHits.concat(intlHits);
   // Prefer closer matches first — an exact or near-exact name match (e.g.
   // "South Africa") should always outrank longer variants like "South
   // Africa Sevens" or "South Africa U20", regardless of registry order.
   hits.sort((a,b)=>{
-   let an=norm(a.team_name),bn=norm(b.team_name);
+   let an=norm(a.name),bn=norm(b.name);
    let ae=an===cq?0:1,be=bn===cq?0:1;
    if(ae!==be)return ae-be;
-   return a.team_name.length-b.team_name.length;
+   return a.name.length-b.name.length;
   });
   if(!hits.length){box.innerHTML='<b>No team found.</b><p class="muted">Try a full official name, club name, or common nickname.</p>';return}
   box.innerHTML='<h3>Teams found ('+hits.length+')</h3>'+hits.slice(0,20).map(t=>
-   '<div class="result"><b>'+esc(t.team_name)+'</b><div class="muted">ID: '+esc(t.team_id)+'</div>'+
-   '<button type="button" class="btn-find-matches" data-team-id="'+esc(t.team_id)+'" data-team-name="'+esc(t.team_name)+'">Find Matches</button></div>'
+   '<div class="result"><b>'+esc(t.name)+'</b><div class="muted">'+(t.source==='intl'?'International':'Club')+' · ID: '+esc(t.id)+'</div>'+
+   '<button type="button" class="btn-find-matches" data-source="'+t.source+'" data-team-id="'+esc(t.id)+'" data-team-name="'+esc(t.name)+'">Find Matches</button></div>'
   ).join('');
  }catch(e){box.innerHTML='<b>Could not load the team registry.</b><p class="muted">'+esc(e.message)+' — check the data bridge has run at least once and RAW above points at your repo.</p>'}
 }
 
-async function matches(teamId,name){
+function matches(source,teamId,name){
+ if(source==='intl') return intlMatches(teamId,name);
+ return clubMatches(teamId,name);
+}
+
+async function clubMatches(teamId,name){
  let box=document.getElementById('matches');box.style.display='block';box.innerHTML='<b>Loading matches for '+esc(name)+'…</b>';
  try{
   await loadRegistries();
@@ -77,12 +92,32 @@ async function matches(teamId,name){
   let out=rows.filter(r=>(!season||String(r.game_date||'').startsWith(season))&&(!comp||norm(compName(r.competition_id)).includes(comp))).sort((a,b)=>String(b.game_date).localeCompare(String(a.game_date)));
   box.innerHTML=out.length?('<h3>'+esc(name)+' matches ('+out.length+')</h3>'+out.slice(0,50).map(r=>
    '<div class="result"><b>'+esc(name)+' vs '+esc(r.team_vs)+'</b><div class="muted">'+fmt(r.game_date)+' · '+esc(compName(r.competition_id))+'</div>'+
-   '<button type="button" class="btn-load-match" data-match-id="'+esc(r.match_id)+'" data-team-id="'+esc(teamId)+'" data-opp-id="'+esc(r.team_vs_id)+'">Load Match</button></div>'
+   '<button type="button" class="btn-load-match" data-source="club" data-match-id="'+esc(r.match_id)+'" data-team-id="'+esc(teamId)+'" data-opp-id="'+esc(r.team_vs_id)+'">Load Match</button></div>'
   ).join('')):'<p>No matches found for those filters.</p>';
  }catch(e){box.innerHTML='<b>Could not load matches for this team.</b><p class="muted">'+esc(e.message)+'</p>'}
 }
 
-async function load(matchId,teamId,oppId){
+async function intlMatches(teamId,name){
+ let box=document.getElementById('matches');box.style.display='block';box.innerHTML='<b>Loading matches for '+esc(name)+'…</b>';
+ try{
+  await loadIntlRegistries();
+  let season=document.getElementById('season').value,comp=norm(document.getElementById('comp').value);
+  let rows=INTL_MATCHES.filter(m=>(m.homeTeam&&String(m.homeTeam.id)===String(teamId))||(m.awayTeam&&String(m.awayTeam.id)===String(teamId)));
+  let out=rows.filter(m=>(!season||String(m.league?.season||'')===season)&&(!comp||norm(m.league?.name).includes(comp))).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  box.innerHTML=out.length?('<h3>'+esc(name)+' matches ('+out.length+')</h3>'+out.slice(0,50).map(m=>{
+   let opp=(m.homeTeam&&String(m.homeTeam.id)===String(teamId))?m.awayTeam:m.homeTeam;
+   return '<div class="result"><b>'+esc(name)+' vs '+esc(opp?.name)+'</b><div class="muted">'+fmt(m.date)+' · '+esc(m.league?.name)+' '+esc(m.league?.season)+'</div>'+
+   '<button type="button" class="btn-load-match" data-source="intl" data-match-id="'+esc(m.id)+'">Load Match</button></div>';
+  }).join('')):'<p>No matches found for those filters.</p>';
+ }catch(e){box.innerHTML='<b>Could not load matches for this team.</b><p class="muted">'+esc(e.message)+'</p>'}
+}
+
+function load(source,matchId,teamId,oppId){
+ if(source==='intl') return intlLoad(matchId);
+ return clubLoad(matchId,teamId,oppId);
+}
+
+async function clubLoad(matchId,teamId,oppId){
  try{
   let details=null;
   try{details=await get(RAW+'match-details/'+matchId+'.json')}catch(e){/* not cached yet, that's OK */}
@@ -112,6 +147,31 @@ async function load(matchId,teamId,oppId){
    away_score:homeIsSelf?oppScore:selfScore,
    home:homeIsSelf?selfRow:oppRow,
    away:homeIsSelf?oppRow:selfRow,
+   players:[]
+  };
+  players=[];
+  render();tab('analysis');
+  document.getElementById('swapNote').textContent='';
+ }catch(e){alert('Could not load match: '+e.message)}
+}
+
+async function intlLoad(matchId){
+ try{
+  await loadIntlRegistries();
+  let m=INTL_MATCHES.find(x=>String(x.id)===String(matchId));
+  if(!m){alert('Could not find that match.');return}
+  let scoreParts=String(m.state?.score||'').split(' - ').map(s=>parseInt(s.trim(),10));
+  current={
+   home_team:m.homeTeam?.name||'?',
+   away_team:m.awayTeam?.name||'?',
+   date:m.date,
+   competition:(m.league?.name||'')+' '+(m.league?.season||''),
+   home_score:Number.isFinite(scoreParts[0])?scoreParts[0]:undefined,
+   away_score:Number.isFinite(scoreParts[1])?scoreParts[1]:undefined,
+   // The international source doesn't provide a detailed box score
+   // (tackles, kicks, etc.) - only scores and team/competition info.
+   home:{},
+   away:{},
    players:[]
   };
   players=[];
@@ -160,7 +220,7 @@ function render(){
 }
 function renderPlayers(){if(!players.length){document.getElementById('summary').innerHTML='No player-level data supplied.';document.getElementById('ptable').innerHTML='';return}let s=players.map(p=>({...p,r:rating(p)})).sort((a,b)=>b.r-a.r),top=s[0];document.getElementById('summary').innerHTML='<div class="rating">'+esc(top.name)+' — '+top.r.toFixed(1)+'/10</div><span class="badge">Calculated RMS rating</span>';document.getElementById('ptable').innerHTML='<table><tr><th>Player</th><th>Team</th><th>Tackles</th><th>Metres</th><th>TO won</th><th>Rating</th></tr>'+s.map(p=>'<tr><td>'+esc(p.name)+'</td><td>'+esc(p.team)+'</td><td>'+(p.tackles??'—')+'</td><td>'+(p.metres??'—')+'</td><td>'+(p.turnovers_won??'—')+'</td><td><b>'+p.r.toFixed(1)+'</b></td></tr>').join('')+'</table>'}
 function graphic(type){let c=document.getElementById('cv'),x=c.getContext('2d');x.fillStyle='#0b1220';x.fillRect(0,0,1280,720);x.fillStyle='#fff';x.font='bold 42px system-ui';x.fillText('RUCK ME SIDEWAYS',70,80);if(!current){x.fillText('Load a match first',70,160);return}x.font='bold 48px system-ui';x.fillText(current.home_team+' '+(current.home_score??'—')+' – '+(current.away_score??'—')+' '+current.away_team,70,180);x.font='32px system-ui';x.fillText(type==='players'&&players.length?'PLAYER OF THE MATCH':type==='defence'?'DEFENCE BATTLE':'FINAL SCORE',70,330);if(type==='players'&&players.length){let p=players.slice().sort((a,b)=>rating(b)-rating(a))[0];x.font='bold 54px system-ui';x.fillText(p.name+' · '+rating(p).toFixed(1)+'/10',70,410)}else{x.font='30px system-ui';x.fillText('Tackles: '+(current.home?.tackles??'—')+' vs '+(current.away?.tackles??'—'),70,400);x.fillText('Territory: '+(current.home?.territory??'—')+' vs '+(current.away?.territory??'—'),70,450)}}
-function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v16.png';a.href=document.getElementById('cv').toDataURL();a.click()}
+function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v17.png';a.href=document.getElementById('cv').toDataURL();a.click()}
 
 // ---- wiring: everything below binds events with addEventListener instead
 // of inline onclick, including a single delegated listener for buttons
@@ -178,8 +238,8 @@ document.querySelectorAll('nav [data-tab]').forEach(btn=>btn.addEventListener('c
 
 document.body.addEventListener('click',function(e){
  let findBtn=e.target.closest('.btn-find-matches');
- if(findBtn){matches(findBtn.dataset.teamId,findBtn.dataset.teamName);return}
+ if(findBtn){matches(findBtn.dataset.source,findBtn.dataset.teamId,findBtn.dataset.teamName);return}
  let loadBtn=e.target.closest('.btn-load-match');
- if(loadBtn){load(loadBtn.dataset.matchId,loadBtn.dataset.teamId,loadBtn.dataset.oppId);return}
+ if(loadBtn){load(loadBtn.dataset.source,loadBtn.dataset.matchId,loadBtn.dataset.teamId,loadBtn.dataset.oppId);return}
 });
 </script></body></html>
