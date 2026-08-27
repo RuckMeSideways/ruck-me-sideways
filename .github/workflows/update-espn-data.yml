@@ -1,1 +1,41 @@
+# Place this file at: .github/workflows/update-espn-data.yml
+# No secret required - ESPN's endpoints need no API key.
+name: Update ESPN rugby data
 
+on:
+  schedule:
+    - cron: '15 6 * * *'   # daily, 06:15 UTC
+  workflow_dispatch: {}     # lets you trigger it manually from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  update-espn-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Fetch ESPN rugby data
+        run: python scripts/update_espn.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/espn/
+          if git diff --cached --quiet; then
+            echo "No ESPN data changes"
+          else
+            git commit -m "Update ESPN rugby data $(date -u +'%Y-%m-%d')"
+            git push
+          fi
