@@ -33,7 +33,7 @@ MATCH_STATS_DIR = DATA_DIR / "match-stats"
 # against the real league names ESPN returns, not hardcoded IDs, so it
 # self-corrects if ESPN renames something.
 LEAGUE_NAME_INCLUDES = ["rugby championship", "six nations", "rugby world cup", "british and irish lions"]
-LEAGUE_NAME_EXCLUDES = ["u20", "women", "sevens", "summer series"]
+LEAGUE_NAME_EXCLUDES = ["u20", "women", "sevens", "summer series", "united rugby"]
 
 MAX_NEW_EVENTS_PER_RUN = 150  # caps how many new matches get fully processed in one run
 REQUEST_PAUSE_SECONDS = 0.3
@@ -63,13 +63,19 @@ def load_json(path: Path, default):
 
 
 def discover_leagues():
-    """Find target league IDs by name, not hardcoded IDs."""
+    """Find target league IDs by name, not hardcoded IDs.
+    NOTE: the numeric id in the URL path (e.g. .../leagues/244293) is what
+    every other endpoint needs - it is NOT the same as the "id" field
+    inside the response body (e.g. "8328"), which is ESPN's internal db
+    id and doesn't work for further queries. Always use the URL-path id.
+    """
     all_refs = get_json(f"{CORE_BASE}/leagues", {"limit": 100}).get("items", [])
     leagues = []
     for ref in all_refs:
         url = ref.get("$ref", "").split("?")[0]
         if not url:
             continue
+        url_id = url.rstrip("/").split("/")[-1]
         try:
             detail = get_json(url)
         except Exception as e:
@@ -79,12 +85,13 @@ def discover_leagues():
         if any(inc in name for inc in LEAGUE_NAME_INCLUDES) and not any(exc in name for exc in LEAGUE_NAME_EXCLUDES):
             season = detail.get("season") or {}
             leagues.append({
-                "id": detail.get("id"),
+                "id": url_id,
+                "internal_id": detail.get("id"),
                 "name": detail.get("name"),
                 "season_start": season.get("startDate"),
                 "season_end": season.get("endDate"),
             })
-            print(f"  matched league: {detail.get('name')} (id {detail.get('id')})")
+            print(f"  matched league: {detail.get('name')} (id {url_id})")
         time.sleep(REQUEST_PAUSE_SECONDS)
     return leagues
 
@@ -101,6 +108,16 @@ def discover_events(league):
     except Exception as e:
         print(f"  ! failed fetching events for league {league['id']}: {e}")
         return []
+    if not items and "dates" in params:
+        # Fall back to no date filter at all, in case the range format
+        # isn't being interpreted the way we expect - better to get
+        # "whatever ESPN defaults to" than nothing.
+        print(f"  0 events with dates={params['dates']}, retrying without a date filter...")
+        try:
+            items = get_json(f"{CORE_BASE}/leagues/{league['id']}/events", {"limit": 200}).get("items", [])
+        except Exception as e:
+            print(f"  ! fallback fetch also failed for league {league['id']}: {e}")
+            return []
     ids = []
     for ref in items:
         url = ref.get("$ref", "")
