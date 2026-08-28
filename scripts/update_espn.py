@@ -105,44 +105,56 @@ def discover_leagues():
     return leagues
 
 
+EVENT_SEARCH_YEARS = [2022, 2023, 2024, 2025, 2026, 2027]
+
+
 def discover_events(league):
-    """Get all event IDs for a league. Uses a wide, fixed date range rather
-    than trusting the league's own season_start/season_end - for
-    restructured/new competitions (like Nations Championship in 2026)
-    ESPN's own season metadata has been found to cover only part of the
-    year (e.g. just the Six Nations window), silently missing fixtures
-    played later in the same competition."""
-    params = {"limit": 200, "dates": "20220101-20271231"}
-    try:
-        first = get_json(f"{CORE_BASE}/leagues/{league['id']}/events", params)
-    except Exception as e:
-        print(f"  ! failed fetching events for league {league['id']}: {e}")
-        return []
-    items = list(first.get("items", []))
-    page_count = first.get("pageCount", 1)
-    for page in range(2, page_count + 1):
+    """Get all event IDs for a league, one year at a time.
+    NOTE: ESPN's "dates" range parameter has an undocumented maximum span -
+    a single multi-year range (e.g. 2022-2027) gets rejected outright with
+    HTTP 400, not silently truncated. Querying year-by-year avoids that
+    limit and also avoids trusting the league's own season_start/season_end
+    metadata, which has been found to be too narrow for restructured
+    competitions (e.g. Nations Championship in 2026)."""
+    seen_ids = set()
+    ids = []
+    for year in EVENT_SEARCH_YEARS:
+        params = {"limit": 200, "dates": f"{year}0101-{year}1231"}
         try:
-            more = get_json(f"{CORE_BASE}/leagues/{league['id']}/events", {**params, "page": page})
-            items.extend(more.get("items", []))
+            page = get_json(f"{CORE_BASE}/leagues/{league['id']}/events", params)
         except Exception as e:
-            print(f"  ! failed fetching events page {page} for league {league['id']}: {e}")
+            print(f"  ! failed fetching {year} events for league {league['id']}: {e}")
+            continue
+        items = list(page.get("items", []))
+        page_count = page.get("pageCount", 1)
+        for p in range(2, page_count + 1):
+            try:
+                more = get_json(f"{CORE_BASE}/leagues/{league['id']}/events", {**params, "page": p})
+                items.extend(more.get("items", []))
+            except Exception as e:
+                print(f"  ! failed fetching {year} events page {p} for league {league['id']}: {e}")
+            time.sleep(REQUEST_PAUSE_SECONDS)
+        for ref in items:
+            url = ref.get("$ref", "")
+            eid = url.rstrip("/").split("/")[-1].split("?")[0]
+            if eid and eid not in seen_ids:
+                seen_ids.add(eid)
+                ids.append(eid)
         time.sleep(REQUEST_PAUSE_SECONDS)
-    if not items:
+    if not ids:
         # Fall back to no date filter at all, in case the range format
         # isn't being interpreted the way we expect - better to get
         # "whatever ESPN defaults to" than nothing.
-        print(f"  0 events with wide date range, retrying without a date filter...")
+        print(f"  0 events across all years, retrying without a date filter...")
         try:
             items = get_json(f"{CORE_BASE}/leagues/{league['id']}/events", {"limit": 200}).get("items", [])
+            for ref in items:
+                url = ref.get("$ref", "")
+                eid = url.rstrip("/").split("/")[-1].split("?")[0]
+                if eid:
+                    ids.append(eid)
         except Exception as e:
             print(f"  ! fallback fetch also failed for league {league['id']}: {e}")
-            return []
-    ids = []
-    for ref in items:
-        url = ref.get("$ref", "")
-        eid = url.rstrip("/").split("/")[-1].split("?")[0]
-        if eid:
-            ids.append(eid)
     return ids
 
 
