@@ -69,7 +69,16 @@ def discover_leagues():
     inside the response body (e.g. "8328"), which is ESPN's internal db
     id and doesn't work for further queries. Always use the URL-path id.
     """
-    all_refs = get_json(f"{CORE_BASE}/leagues", {"limit": 100}).get("items", [])
+    first_page = get_json(f"{CORE_BASE}/leagues", {"limit": 100})
+    page_count = first_page.get("pageCount", 1)
+    total_count = first_page.get("count", len(first_page.get("items", [])))
+    print(f"  /leagues reports {total_count} total league(s) across {page_count} page(s)")
+    all_refs = list(first_page.get("items", []))
+    for page in range(2, page_count + 1):
+        more = get_json(f"{CORE_BASE}/leagues", {"limit": 100, "page": page})
+        all_refs.extend(more.get("items", []))
+        time.sleep(REQUEST_PAUSE_SECONDS)
+
     leagues = []
     for ref in all_refs:
         url = ref.get("$ref", "").split("?")[0]
