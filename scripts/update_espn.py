@@ -106,22 +106,32 @@ def discover_leagues():
 
 
 def discover_events(league):
-    """Get all event IDs for a league's current season window."""
-    start = (league.get("season_start") or "")[:10].replace("-", "")
-    end = (league.get("season_end") or "")[:10].replace("-", "")
-    params = {"limit": 200}
-    if start and end:
-        params["dates"] = f"{start}-{end}"
+    """Get all event IDs for a league. Uses a wide, fixed date range rather
+    than trusting the league's own season_start/season_end - for
+    restructured/new competitions (like Nations Championship in 2026)
+    ESPN's own season metadata has been found to cover only part of the
+    year (e.g. just the Six Nations window), silently missing fixtures
+    played later in the same competition."""
+    params = {"limit": 200, "dates": "20220101-20271231"}
     try:
-        items = get_json(f"{CORE_BASE}/leagues/{league['id']}/events", params).get("items", [])
+        first = get_json(f"{CORE_BASE}/leagues/{league['id']}/events", params)
     except Exception as e:
         print(f"  ! failed fetching events for league {league['id']}: {e}")
         return []
-    if not items and "dates" in params:
+    items = list(first.get("items", []))
+    page_count = first.get("pageCount", 1)
+    for page in range(2, page_count + 1):
+        try:
+            more = get_json(f"{CORE_BASE}/leagues/{league['id']}/events", {**params, "page": page})
+            items.extend(more.get("items", []))
+        except Exception as e:
+            print(f"  ! failed fetching events page {page} for league {league['id']}: {e}")
+        time.sleep(REQUEST_PAUSE_SECONDS)
+    if not items:
         # Fall back to no date filter at all, in case the range format
         # isn't being interpreted the way we expect - better to get
         # "whatever ESPN defaults to" than nothing.
-        print(f"  0 events with dates={params['dates']}, retrying without a date filter...")
+        print(f"  0 events with wide date range, retrying without a date filter...")
         try:
             items = get_json(f"{CORE_BASE}/leagues/{league['id']}/events", {"limit": 200}).get("items", [])
         except Exception as e:
