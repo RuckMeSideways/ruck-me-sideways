@@ -278,4 +278,62 @@ function swapNames(){
  if(!current)return;
  let t=current.home_team;current.home_team=current.away_team;current.away_team=t;
  render();
- document.getElementBy
+ document.getElementById('swapNote').textContent='Names swapped manually.';
+}
+function swapScore(){
+ if(!current)return;
+ let s=current.home_score;current.home_score=current.away_score;current.away_score=s;
+ render();
+ document.getElementById('swapNote').textContent='Score swapped manually.';
+}
+function swapStats(){
+ if(!current)return;
+ let s=current.home;current.home=current.away;current.away=s;
+ render();
+ document.getElementById('swapNote').textContent='Stats columns swapped manually.';
+}
+
+function render(){
+ document.getElementById('title').textContent=current.home_team+' vs '+current.away_team;
+ document.getElementById('meta').textContent=fmt(current.date)+' · '+(current.competition||'');
+ document.getElementById('score').textContent=(current.home_score??'—')+' – '+(current.away_score??'—');
+ let h=current.home||{},a=current.away||{};
+ let pct=current.percentStats||new Set();
+ let keys;
+ if(current.statOrder){
+  // curated, ordered list (ESPN) - only include stats that actually exist for this match
+  keys=current.statOrder.filter(k=>typeof h[k]==='number'||typeof a[k]==='number');
+ }else{
+  // generic - every numeric field present, alphabetical (club data)
+  keys=Object.keys(h).filter(k=>!SKIP_KEYS.has(k)&&(typeof h[k]==='number'||typeof a[k]==='number')).sort();
+ }
+ let fmtVal=(k,v)=>{if(v==null)return '—';return pct.has(k)?(v*100).toFixed(0)+'%':String(v)};
+ let rows=keys.map(k=>[statLabel(k),fmtVal(k,h[k]),fmtVal(k,a[k])]);
+ document.getElementById('stats').innerHTML=rows.length?('<div class="card"><table><tr><th>Statistic</th><th>'+esc(current.home_team)+'</th><th>'+esc(current.away_team)+'</th></tr>'+rows.map(r=>'<tr><td>'+esc(r[0])+'</td><td>'+esc(r[1])+'</td><td>'+esc(r[2])+'</td></tr>').join('')+'</table></div>'):'<div class="card muted">No box-score stats cached for this match yet — it may be too recent, check back after the next daily update.</div>';
+ renderPlayers();
+}
+function renderPlayers(){if(!players.length){document.getElementById('summary').innerHTML='No player-level data supplied.';document.getElementById('ptable').innerHTML='';return}let s=players.map(p=>({...p,r:rating(p)})).sort((a,b)=>b.r-a.r),top=s[0];document.getElementById('summary').innerHTML='<div class="rating">'+esc(top.name)+' — '+top.r.toFixed(1)+'/10</div><span class="badge">Calculated RMS rating</span>';document.getElementById('ptable').innerHTML='<table><tr><th>Player</th><th>Team</th><th>Tackles</th><th>Metres</th><th>TO won</th><th>Rating</th></tr>'+s.map(p=>'<tr><td>'+esc(p.name)+'</td><td>'+esc(p.team)+'</td><td>'+(p.tackles??'—')+'</td><td>'+(p.metres??'—')+'</td><td>'+(p.turnovers_won??'—')+'</td><td><b>'+p.r.toFixed(1)+'</b></td></tr>').join('')+'</table>'}
+function graphic(type){let c=document.getElementById('cv'),x=c.getContext('2d');x.fillStyle='#0b1220';x.fillRect(0,0,1280,720);x.fillStyle='#fff';x.font='bold 42px system-ui';x.fillText('RUCK ME SIDEWAYS',70,80);if(!current){x.fillText('Load a match first',70,160);return}x.font='bold 48px system-ui';x.fillText(current.home_team+' '+(current.home_score??'—')+' – '+(current.away_score??'—')+' '+current.away_team,70,180);x.font='32px system-ui';x.fillText(type==='players'&&players.length?'PLAYER OF THE MATCH':type==='defence'?'DEFENCE BATTLE':'FINAL SCORE',70,330);if(type==='players'&&players.length){let p=players.slice().sort((a,b)=>rating(b)-rating(a))[0];x.font='bold 54px system-ui';x.fillText(p.name+' · '+rating(p).toFixed(1)+'/10',70,410)}else{x.font='30px system-ui';x.fillText('Tackles: '+(current.home?.tackles??'—')+' vs '+(current.away?.tackles??'—'),70,400);x.fillText('Territory: '+(current.home?.territory??'—')+' vs '+(current.away?.territory??'—'),70,450)}}
+function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v18.png';a.href=document.getElementById('cv').toDataURL();a.click()}
+
+// ---- wiring: everything below binds events with addEventListener instead
+// of inline onclick, including a single delegated listener for buttons
+// that get created dynamically (Find Matches / Load Match) ----
+document.getElementById('btnFindTeam').addEventListener('click',search);
+document.getElementById('btnDemo').addEventListener('click',demo);
+document.getElementById('btnGScore').addEventListener('click',()=>graphic('score'));
+document.getElementById('btnGPlayers').addEventListener('click',()=>graphic('players'));
+document.getElementById('btnGDefence').addEventListener('click',()=>graphic('defence'));
+document.getElementById('btnSave').addEventListener('click',save);
+document.getElementById('btnSwapNames').addEventListener('click',swapNames);
+document.getElementById('btnSwapScore').addEventListener('click',swapScore);
+document.getElementById('btnSwapStats').addEventListener('click',swapStats);
+document.querySelectorAll('nav [data-tab]').forEach(btn=>btn.addEventListener('click',()=>tab(btn.dataset.tab)));
+
+document.body.addEventListener('click',function(e){
+ let findBtn=e.target.closest('.btn-find-matches');
+ if(findBtn){matches(findBtn.dataset.source,findBtn.dataset.teamId,findBtn.dataset.teamName);return}
+ let loadBtn=e.target.closest('.btn-load-match');
+ if(loadBtn){load(loadBtn.dataset.source,loadBtn.dataset.matchId,loadBtn.dataset.teamId,loadBtn.dataset.oppId);return}
+});
+</script></body></html>
