@@ -32,7 +32,7 @@ MATCH_STATS_DIR = DATA_DIR / "match-stats"
 # variants for now to keep call volume bounded. Matched by substring
 # against the real league names ESPN returns, not hardcoded IDs, so it
 # self-corrects if ESPN renames something.
-LEAGUE_NAME_INCLUDES = ["rugby championship", "six nations", "rugby world cup", "british and irish lions", "nations championship"]
+LEAGUE_NAME_INCLUDES = ["rugby championship", "six nations", "rugby world cup", "british and irish lions", "nations championship", "tour"]
 LEAGUE_NAME_EXCLUDES = ["u20", "women", "sevens", "summer series", "united rugby"]
 
 MAX_NEW_EVENTS_PER_RUN = 150  # caps how many new matches get fully processed in one run
