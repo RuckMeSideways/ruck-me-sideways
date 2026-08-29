@@ -1,1 +1,18 @@
-
+# Ruck Me Sideways - manually tracked matches
+# For matches that don't show up in any of the automated data sources
+# (one-off series, obscure fixtures, etc).
+#
+# ONE MATCH PER LINE. Format (six fields, separated by | ):
+#   date|competition|home team|away team|home score|away score
+#
+# - date: YYYY-MM-DD
+# - Lines starting with # are ignored (comments, like this one)
+# - Blank lines are ignored
+# - A line that's missing a field or has a typo is simply skipped by the
+#   app, not treated as an error - it just won't show up as a match.
+# - Easiest way to add matches: use the match-entry-form.html tool
+#   (fill in the fields, it builds the line for you) rather than typing
+#   the | -separated format by hand.
+#
+# Example (real match, added while building this feature):
+2026-08-22|Rugby's Greatest Rivalry|South Africa|New Zealand|16|33
