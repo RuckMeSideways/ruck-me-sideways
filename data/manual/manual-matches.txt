@@ -1,0 +1,8 @@
+home: South Africa
+away: New Zealand
+home_score: 16
+away_score: 33
+date: 2026-08-22
+competition: Rugby's Greatest Rivalry
+venue: Ellis Park
+---
