@@ -1,7 +1,7 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b1220"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v20</title><style>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b1220"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v21</title><style>
 body{margin:0;font-family:system-ui;background:#0b1220;color:#eef2f7}header{padding:16px;background:#111b2e}h1{margin:0;font-size:23px}.sub{color:#aab7ca;font-size:12px}nav{display:flex;gap:7px;overflow:auto;padding:9px;background:#0f1727;position:sticky;top:0}button{border:0;border-radius:9px;padding:10px 13px;background:#1f6feb;color:white;font-weight:700}.tab{display:none;max-width:1100px;margin:auto;padding:14px}.tab.active{display:block}.card{background:#121d30;border:1px solid #293850;border-radius:14px;padding:14px;margin-bottom:12px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px}input,select{background:#0b1220;color:white;border:1px solid #3a4962;border-radius:8px;padding:10px;width:100%;box-sizing:border-box}.field{display:flex;flex-direction:column;gap:5px}.field label,.muted{color:#aab7ca}.row{display:flex;gap:8px;flex-wrap:wrap}.result{padding:12px;border:1px solid #293850;border-radius:10px;margin:8px 0}.score{text-align:center;font-size:34px;font-weight:800}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px;border-bottom:1px solid #293850;text-align:left}th{color:#aab7ca}.rating{font-size:26px;font-weight:800}.badge{display:inline-block;padding:4px 7px;border-radius:999px;background:#4b3b0a;font-size:11px}
 </style></head><body>
-<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v20 · Proper Rugby Match Search & Analysis · all teams</div></header>
+<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v21 · Proper Rugby Match Search & Analysis · all teams</div></header>
 <nav>
 <button type="button" data-tab="search">🔎 Find Match</button>
 <button type="button" data-tab="analysis">📊 Analysis</button>
@@ -61,33 +61,25 @@ function espnTeamList(){
  return Array.from(out,([id,name])=>({id,name}));
 }
 
-// Manual entries: a plain-text file (not JSON) so a match can be added by
-// typing a small block, without ever needing to paste/reconstruct a large
-// file. Blocks are separated by a line containing only "---". Recognised
-// fields: home, away, home_score, away_score, date, competition, venue.
-// Any other "home_xxx"/"away_xxx" line becomes a stat in the Analysis
-// table, using the same generic renderer as club-data matches.
+// Manual entries: a simple plain-text file (data/manual/matches.txt), one
+// match per line, pipe-separated:
+//   date|competition|home team|away team|home score|away score
+// A malformed line is just skipped, never treated as a fatal error - one
+// typo can't break the whole file the way a JSON syntax error would.
 function parseManualMatches(text){
- let blocks=String(text||'').split(/\n-{3,}\n?/).map(b=>b.trim()).filter(Boolean);
- return blocks.map((b,i)=>{
-  let m={id:'manual'+i,home:{},away:{}};
-  b.split('\n').forEach(line=>{
-   let idx=line.indexOf(':');if(idx<0)return;
-   let key=line.slice(0,idx).trim().toLowerCase();
-   let val=line.slice(idx+1).trim();
-   if(!key||!val)return;
-   if(key==='home')m.home_team=val;
-   else if(key==='away')m.away_team=val;
-   else if(key==='home_score')m.home_score=parseFloat(val);
-   else if(key==='away_score')m.away_score=parseFloat(val);
-   else if(key==='date')m.date=val;
-   else if(key==='competition')m.competition=val;
-   else if(key==='venue')m.venue=val;
-   else if(key.startsWith('home_')){let n=parseFloat(val);m.home[key.slice(5)]=isNaN(n)?val:n}
-   else if(key.startsWith('away_')){let n=parseFloat(val);m.away[key.slice(5)]=isNaN(n)?val:n}
-  });
-  return m;
- }).filter(m=>m.home_team&&m.away_team);
+ let lines=String(text||'').split('\n');
+ let out=[];
+ lines.forEach((line,i)=>{
+  line=line.trim();
+  if(!line||line.startsWith('#'))return;
+  let parts=line.split('|').map(s=>s.trim());
+  if(parts.length<6)return;
+  let [date,competition,home,away,hs,as]=parts;
+  let homeScore=parseFloat(hs),awayScore=parseFloat(as);
+  if(!date||!home||!away||isNaN(homeScore)||isNaN(awayScore))return;
+  out.push({id:'manual'+i,date,competition,home_team:home,away_team:away,home_score:homeScore,away_score:awayScore,home:{},away:{}});
+ });
+ return out;
 }
 async function loadManualMatches(){
  if(!MANUAL_MATCHES){
@@ -409,7 +401,7 @@ function render(){
 }
 function renderPlayers(){if(!players.length){document.getElementById('summary').innerHTML='No player-level data supplied.';document.getElementById('ptable').innerHTML='';return}let s=players.map(p=>({...p,r:rating(p)})).sort((a,b)=>b.r-a.r),top=s[0];document.getElementById('summary').innerHTML='<div class="rating">'+esc(top.name)+' — '+top.r.toFixed(1)+'/10</div><span class="badge">Calculated RMS rating</span>';document.getElementById('ptable').innerHTML='<table><tr><th>Player</th><th>Team</th><th>Tackles</th><th>Metres</th><th>TO won</th><th>Rating</th></tr>'+s.map(p=>'<tr><td>'+esc(p.name)+'</td><td>'+esc(p.team)+'</td><td>'+(p.tackles??'—')+'</td><td>'+(p.metres??'—')+'</td><td>'+(p.turnovers_won??'—')+'</td><td><b>'+p.r.toFixed(1)+'</b></td></tr>').join('')+'</table>'}
 function graphic(type){let c=document.getElementById('cv'),x=c.getContext('2d');x.fillStyle='#0b1220';x.fillRect(0,0,1280,720);x.fillStyle='#fff';x.font='bold 42px system-ui';x.fillText('RUCK ME SIDEWAYS',70,80);if(!current){x.fillText('Load a match first',70,160);return}x.font='bold 48px system-ui';x.fillText(current.home_team+' '+(current.home_score??'—')+' – '+(current.away_score??'—')+' '+current.away_team,70,180);x.font='32px system-ui';x.fillText(type==='players'&&players.length?'PLAYER OF THE MATCH':type==='defence'?'DEFENCE BATTLE':'FINAL SCORE',70,330);if(type==='players'&&players.length){let p=players.slice().sort((a,b)=>rating(b)-rating(a))[0];x.font='bold 54px system-ui';x.fillText(p.name+' · '+rating(p).toFixed(1)+'/10',70,410)}else{x.font='30px system-ui';x.fillText('Tackles: '+(current.home?.tackles??'—')+' vs '+(current.away?.tackles??'—'),70,400);x.fillText('Territory: '+(current.home?.territory??'—')+' vs '+(current.away?.territory??'—'),70,450)}}
-function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v20.png';a.href=document.getElementById('cv').toDataURL();a.click()}
+function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v21.png';a.href=document.getElementById('cv').toDataURL();a.click()}
 
 // ---- wiring: everything below binds events with addEventListener instead
 // of inline onclick, including a single delegated listener for buttons
