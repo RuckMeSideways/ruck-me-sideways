@@ -46,9 +46,29 @@ button{border:0;border-radius:9px;padding:12px 16px;background:#1f6b3d;color:#f9
 
 <div class="list" id="list"></div>
 
-<div class="field" style="margin-top:16px"><label>Copy this into matches.txt (append to the end of the file):</label></div>
+<div class="field" style="margin-top:16px"><label>Or copy this into matches.txt manually (append to the end of the file):</label></div>
 <div id="out">Nothing added yet.</div>
 <button type="button" id="btnCopy">Copy to clipboard</button>
+
+<div class="card">
+<h2>🚀 Publish directly to GitHub</h2>
+<p class="muted">Skip the copy/paste - commit the new matches straight to your repo. Requires a GitHub access token (see below for how to create one safely). The token is never saved anywhere except your browser's session storage if you tick "remember," and even then only until you close the tab.</p>
+<div class="field"><label>GitHub token</label><input type="password" id="ghToken" placeholder="ghp_... or github_pat_..."></div>
+<label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#9fb39a;margin-bottom:10px"><input type="checkbox" id="ghRemember" style="width:auto"> Remember token for this browser tab only</label>
+<div class="field"><label>Repo owner</label><input id="ghOwner" value="RuckMeSideways"></div>
+<div class="field"><label>Repo name</label><input id="ghRepo" value="ruck-me-sideways"></div>
+<div class="field"><label>File path</label><input id="ghPath" value="data/manual/matches.txt"></div>
+<button type="button" id="btnPublish">🚀 Publish to GitHub</button>
+<p class="muted" style="margin-top:10px">
+<b>Getting a token (do this once):</b><br>
+1. On GitHub, go to Settings → Developer settings → Personal access tokens → Fine-grained tokens<br>
+2. Generate new token, give it a name like "Ruck Me Sideways form"<br>
+3. Set an expiry (30-90 days is plenty)<br>
+4. Under "Repository access," choose "Only select repositories" and pick just ruck-me-sideways<br>
+5. Under "Permissions," find "Contents" and set it to "Read and write" - leave everything else as No access<br>
+6. Generate, copy the token, paste it above (it won't be shown again by GitHub)
+</p>
+</div>
 
 <script>
 let entries=[];      // completed matches, ready to export
@@ -140,5 +160,69 @@ document.getElementById('btnCopy').addEventListener('click',function(){
  if(!entries.length){alert('Nothing to copy yet - add a match first.');return}
  navigator.clipboard.writeText(text).then(()=>alert('Copied! Paste it at the end of matches.txt on GitHub.'));
 });
+
+// UTF-8 safe base64 helpers (team names may contain accented characters)
+function b64encode(str){return btoa(unescape(encodeURIComponent(str)))}
+function b64decode(b64){return decodeURIComponent(escape(atob(b64.replace(/\n/g,''))))}
+
+async function publishToGitHub(){
+ let token=document.getElementById('ghToken').value.trim();
+ let owner=document.getElementById('ghOwner').value.trim();
+ let repo=document.getElementById('ghRepo').value.trim();
+ let path=document.getElementById('ghPath').value.trim();
+ let btn=document.getElementById('btnPublish');
+ if(!token){alert('Please enter your GitHub token first.');return}
+ if(!entries.length){alert('Nothing to publish yet - add at least one match first.');return}
+ let newLines=document.getElementById('out').textContent;
+ let apiUrl='https://api.github.com/repos/'+owner+'/'+repo+'/contents/'+path;
+ let originalLabel=btn.textContent;
+ btn.disabled=true;btn.textContent='Publishing…';
+ try{
+  let getRes=await fetch(apiUrl,{headers:{'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json'}});
+  if(!getRes.ok){
+   if(getRes.status===404)throw new Error('File not found at that path - check the owner/repo/path fields above.');
+   if(getRes.status===401)throw new Error('GitHub rejected the token - check it was copied correctly and hasn\'t expired.');
+   if(getRes.status===403)throw new Error('GitHub refused access - check the token has "Contents: Read and write" permission for this repo.');
+   throw new Error('GitHub returned '+getRes.status+' fetching the current file.');
+  }
+  let fileData=await getRes.json();
+  let currentContent=b64decode(fileData.content);
+  let updatedContent=currentContent.replace(/\s+$/,'')+'\n'+newLines+'\n';
+  let putRes=await fetch(apiUrl,{
+   method:'PUT',
+   headers:{'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','Content-Type':'application/json'},
+   body:JSON.stringify({
+    message:'Add '+entries.length+' manual match(es) via entry form',
+    content:b64encode(updatedContent),
+    sha:fileData.sha
+   })
+  });
+  if(!putRes.ok){
+   let errBody=await putRes.json().catch(()=>({}));
+   throw new Error('GitHub returned '+putRes.status+' committing the change'+(errBody.message?': '+errBody.message:'')+'.');
+  }
+  if(document.getElementById('ghRemember').checked){
+   sessionStorage.setItem('rms_gh_token',token);
+  }else{
+   sessionStorage.removeItem('rms_gh_token');
+  }
+  alert('Published! '+entries.length+' match(es) committed directly to '+path+'.');
+  entries=[];
+  render();
+ }catch(err){
+  alert('Publish failed: '+err.message+'\n\nYour matches are still in the list below - you can try again, or use "Copy to clipboard" and paste manually instead.');
+ }finally{
+  btn.disabled=false;btn.textContent=originalLabel;
+ }
+}
+document.getElementById('btnPublish').addEventListener('click',publishToGitHub);
+
+// Restore a remembered token for this browser tab only (cleared when the
+// tab closes - never stored permanently).
+let savedToken=sessionStorage.getItem('rms_gh_token');
+if(savedToken){
+ document.getElementById('ghToken').value=savedToken;
+ document.getElementById('ghRemember').checked=true;
+}
 </script>
 </body></html>
