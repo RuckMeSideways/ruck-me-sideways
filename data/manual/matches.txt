@@ -16,3 +16,4 @@
 #
 # Example (real match, added while building this feature):
 2026-08-22|Rugby's Greatest Rivalry|South Africa|New Zealand|16|33
+2026-08-29|Rugby's Greatest Rivalry|South Africa|New Zealand|33|26|home:minutesInLead=79,possessionLast10Min=5,dominantTackles=8,tacklesMade=188,tacklesMissed=39,tackleCompletion%=82.81,22mEntries=6,pointsPer22mEntry=4,kicks=35,carries=104,postContactMetres=280;away:minutesInLead=0,possessionLast10Min=95,dominantTackles=6,tacklesMade=122,tacklesMissed=26,tackleCompletion%=82.43,22mEntries=9,pointsPer22mEntry=2.8,kicks=23,carries=154,postContactMetres=456
