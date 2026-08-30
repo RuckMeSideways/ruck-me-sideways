@@ -1,8 +1,8 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0d0a"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v24</title><style>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0d0a"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v25</title><style>
 body{margin:0;font-family:system-ui;background:#0a0d0a;color:#f3f3ee}header{padding:16px;background:#0e130e;border-bottom:2px solid #1f6b3d}h1{margin:0;font-size:23px;color:#f3f3ee}.sub{color:#c9a227;font-size:12px}nav{display:flex;gap:7px;overflow:auto;padding:9px;background:#101710;position:sticky;top:0;border-bottom:1px solid #23361f}button{border:0;border-radius:9px;padding:10px 13px;background:#1f6b3d;color:#f9f6ea;font-weight:700}button:active{background:#164a2a}.tab{display:none;max-width:1100px;margin:auto;padding:14px}.tab.active{display:block}.card{background:#121a11;border:1px solid #2e4a2e;border-radius:14px;padding:14px;margin-bottom:12px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px}input,select{background:#0a0d0a;color:#f3f3ee;border:1px solid #3a5a3a;border-radius:8px;padding:10px;width:100%;box-sizing:border-box}.field{display:flex;flex-direction:column;gap:5px}.field label,.muted{color:#9fb39a}.row{display:flex;gap:8px;flex-wrap:wrap}.result{padding:12px;border:1px solid #2e4a2e;border-radius:10px;margin:8px 0}.score{text-align:center;font-size:34px;font-weight:800;color:#d9a521}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px;border-bottom:1px solid #2e4a2e;text-align:left}th{color:#d9a521}.rating{font-size:26px;font-weight:800;color:#d9a521}.badge{display:inline-block;padding:4px 7px;border-radius:999px;background:#4a3a0f;color:#e8c968;font-size:11px}
 h2{color:#d9a521}h3{color:#f3f3ee}a{color:#d9a521}
 </style></head><body>
-<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v24 · Proper Rugby Match Search & Analysis · all teams</div></header>
+<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v25 · Proper Rugby Match Search & Analysis · all teams</div></header>
 <nav>
 <button type="button" data-tab="search">🔎 Find Match</button>
 <button type="button" data-tab="analysis">📊 Analysis</button>
@@ -138,7 +138,18 @@ async function search(){
    .map(t=>({source:'espn',id:t.id,name:t.name}));
   let manualHits=manualTeamList().filter(t=>norm(t.name).includes(cq)||norm(t.name).includes(q))
    .map(t=>({source:'manual',id:t.id,name:t.name}));
-  let hits=clubHits.concat(intlHits,espnHits,manualHits);
+  // Merge all four sources into ONE result per team name, rather than a
+  // separate "Club"/"International"/etc entry for the same real team -
+  // matched by normalized name, since the sources don't share a common ID
+  // system. Each merged entry remembers every (source, id) pair behind it,
+  // so "Find Matches" can pull from all of them at once.
+  let groups=new Map();
+  clubHits.concat(intlHits,espnHits,manualHits).forEach(h=>{
+   let key=norm(h.name);
+   if(!groups.has(key))groups.set(key,{name:h.name,sources:[]});
+   groups.get(key).sources.push({source:h.source,id:h.id});
+  });
+  let hits=Array.from(groups.values());
   // Prefer closer matches first — an exact or near-exact name match (e.g.
   // "South Africa") should always outrank longer variants like "South
   // Africa Sevens" or "South Africa U20", regardless of registry order.
@@ -149,89 +160,76 @@ async function search(){
    return a.name.length-b.name.length;
   });
   if(!hits.length){box.innerHTML='<b>No team found.</b><p class="muted">Try a full official name, club name, or common nickname.</p>';return}
-  box.innerHTML='<h3>Teams found ('+hits.length+')</h3>'+hits.slice(0,20).map(t=>
-   '<div class="result"><b>'+esc(t.name)+'</b><div class="muted">'+(t.source==='manual'?'Manual entry':t.source==='espn'?'International · richer stats':t.source==='intl'?'International':'Club')+' · ID: '+esc(t.id)+'</div>'+
-   '<button type="button" class="btn-find-matches" data-source="'+t.source+'" data-team-id="'+esc(t.id)+'" data-team-name="'+esc(t.name)+'">Find Matches</button></div>'
-  ).join('');
+  box.innerHTML='<h3>Teams found ('+hits.length+')</h3>'+hits.slice(0,20).map(t=>{
+   let labels=Array.from(new Set(t.sources.map(s=>sourceLabel(s.source))));
+   return '<div class="result"><b>'+esc(t.name)+'</b><div class="muted">'+esc(labels.join(' + '))+'</div>'+
+   '<button type="button" class="btn-find-matches" data-sources=\''+esc(JSON.stringify(t.sources))+'\' data-team-name="'+esc(t.name)+'">Find Matches</button></div>';
+  }).join('');
  }catch(e){box.innerHTML='<b>Could not load the team registry.</b><p class="muted">'+esc(e.message)+' — check the data bridge has run at least once and RAW above points at your repo.</p>'}
 }
 
-function matches(source,teamId,name){
- if(source==='intl') return intlMatches(teamId,name);
- if(source==='espn') return espnMatches(teamId,name);
- if(source==='manual') return manualMatches(teamId,name);
- return clubMatches(teamId,name);
+function sourceLabel(source){
+ return source==='manual'?'Manual':source==='espn'?'ESPN · stats':source==='intl'?'International':'Club';
 }
 
-async function clubMatches(teamId,name){
- let box=document.getElementById('matches');box.style.display='block';box.innerHTML='<b>Loading matches for '+esc(name)+'…</b>';
- try{
-  await loadRegistries();
-  if(!teamStatsCache[teamId]) teamStatsCache[teamId]=await get(RAW+'team-stats/'+teamId+'.json');
-  let rows=teamStatsCache[teamId];
-  let season=document.getElementById('season').value,comp=norm(document.getElementById('comp').value),opp=norm(document.getElementById('opp').value);
-  let out=rows.filter(r=>(!season||String(r.game_date||'').startsWith(season))&&(!comp||norm(compName(r.competition_id)).includes(comp))&&(!opp||norm(r.team_vs).includes(opp))).sort((a,b)=>String(b.game_date).localeCompare(String(a.game_date)));
-  box.innerHTML=out.length?('<h3>'+esc(name)+' matches ('+out.length+')</h3>'+out.slice(0,50).map(r=>
-   '<div class="result"><b>'+esc(name)+' vs '+esc(r.team_vs)+'</b><div class="muted">'+fmt(r.game_date)+' · '+esc(compName(r.competition_id))+'</div>'+
-   '<button type="button" class="btn-load-match" data-source="club" data-match-id="'+esc(r.match_id)+'" data-team-id="'+esc(teamId)+'" data-opp-id="'+esc(r.team_vs_id)+'">Load Match</button></div>'
-  ).join('')):'<p>No matches found for those filters.</p>';
- }catch(e){box.innerHTML='<b>Could not load matches for this team.</b><p class="muted">'+esc(e.message)+'</p>'}
+// Each fetch* function below returns a plain array of normalized match
+// records (not DOM) - {source, matchId, opponent, date, competition, ...}
+// - so the unified matches() function can pull from several sources at
+// once, merge, filter, and sort them together in one place instead of
+// repeating that logic per source.
+async function fetchClubMatches(teamId){
+ await loadRegistries();
+ if(!teamStatsCache[teamId])teamStatsCache[teamId]=await get(RAW+'team-stats/'+teamId+'.json');
+ return teamStatsCache[teamId].map(r=>({
+  source:'club',matchId:r.match_id,teamId,oppId:r.team_vs_id,
+  opponent:r.team_vs,date:r.game_date,competition:compName(r.competition_id)
+ }));
 }
-
-async function intlMatches(teamId,name){
- let box=document.getElementById('matches');box.style.display='block';box.innerHTML='<b>Loading matches for '+esc(name)+'…</b>';
- try{
-  await loadIntlRegistries();
-  let season=document.getElementById('season').value,comp=norm(document.getElementById('comp').value),opp=norm(document.getElementById('opp').value);
-  let rows=INTL_MATCHES.filter(m=>(m.homeTeam&&String(m.homeTeam.id)===String(teamId))||(m.awayTeam&&String(m.awayTeam.id)===String(teamId)));
-  let out=rows.filter(m=>{
-   let oppName=(m.homeTeam&&String(m.homeTeam.id)===String(teamId))?m.awayTeam?.name:m.homeTeam?.name;
-   return (!season||String(m.league?.season||'')===season)&&(!comp||norm(m.league?.name).includes(comp))&&(!opp||norm(oppName).includes(opp));
-  }).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-  box.innerHTML=out.length?('<h3>'+esc(name)+' matches ('+out.length+')</h3>'+out.slice(0,50).map(m=>{
-   let opp=(m.homeTeam&&String(m.homeTeam.id)===String(teamId))?m.awayTeam:m.homeTeam;
-   return '<div class="result"><b>'+esc(name)+' vs '+esc(opp?.name)+'</b><div class="muted">'+fmt(m.date)+' · '+esc(m.league?.name)+' '+esc(m.league?.season)+'</div>'+
-   '<button type="button" class="btn-load-match" data-source="intl" data-match-id="'+esc(m.id)+'">Load Match</button></div>';
-  }).join('')):'<p>No matches found for those filters.</p>';
- }catch(e){box.innerHTML='<b>Could not load matches for this team.</b><p class="muted">'+esc(e.message)+'</p>'}
+async function fetchIntlMatches(teamId){
+ await loadIntlRegistries();
+ return (INTL_MATCHES||[]).filter(m=>(m.homeTeam&&String(m.homeTeam.id)===String(teamId))||(m.awayTeam&&String(m.awayTeam.id)===String(teamId)))
+  .map(m=>{
+   let isHome=m.homeTeam&&String(m.homeTeam.id)===String(teamId);
+   return {source:'intl',matchId:m.id,opponent:isHome?m.awayTeam?.name:m.homeTeam?.name,date:m.date,competition:(m.league?.name||'')+(m.league?.season?' '+m.league.season:'')};
+  });
 }
-
-async function espnMatches(teamId,name){
- let box=document.getElementById('matches');box.style.display='block';box.innerHTML='<b>Loading matches for '+esc(name)+'…</b>';
- try{
-  await loadEspnRegistry();
-  let season=document.getElementById('season').value,comp=norm(document.getElementById('comp').value),opp=norm(document.getElementById('opp').value);
-  let rows=(ESPN_EVENTS||[]).filter(e=>String(e.home_team_id)===String(teamId)||String(e.away_team_id)===String(teamId));
-  let out=rows.filter(e=>{
+async function fetchEspnMatches(teamId){
+ await loadEspnRegistry();
+ return (ESPN_EVENTS||[]).filter(e=>String(e.home_team_id)===String(teamId)||String(e.away_team_id)===String(teamId))
+  .map(e=>{
    let isHome=String(e.home_team_id)===String(teamId);
-   let oppName=isHome?e.away_team_name:e.home_team_name;
-   return (!season||String(e.date||'').startsWith(season))&&(!comp||norm(e.league_name).includes(comp))&&(!opp||norm(oppName).includes(opp));
-  }).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-  box.innerHTML=out.length?('<h3>'+esc(name)+' matches ('+out.length+')</h3>'+out.slice(0,50).map(e=>{
-   let isHome=String(e.home_team_id)===String(teamId);
-   let opp=isHome?e.away_team_name:e.home_team_name;
-   return '<div class="result"><b>'+esc(name)+' vs '+esc(opp)+'</b><div class="muted">'+fmt(e.date)+' · '+esc(e.league_name)+'</div>'+
-   '<button type="button" class="btn-load-match" data-source="espn" data-match-id="'+esc(e.event_id)+'">Load Match</button></div>';
-  }).join('')):'<p>No matches found for those filters.</p>';
- }catch(e){box.innerHTML='<b>Could not load matches for this team.</b><p class="muted">'+esc(e.message)+'</p>'}
+   return {source:'espn',matchId:e.event_id,opponent:isHome?e.away_team_name:e.home_team_name,date:e.date,competition:e.league_name};
+  });
+}
+async function fetchManualMatches(teamName){
+ await loadManualMatches();
+ return (MANUAL_MATCHES||[]).filter(m=>m.home_team===teamName||m.away_team===teamName)
+  .map(m=>({source:'manual',matchId:m.id,opponent:m.home_team===teamName?m.away_team:m.home_team,date:m.date,competition:m.competition||''}));
 }
 
-async function manualMatches(teamId,name){
+async function matches(sourcesJson,name){
  let box=document.getElementById('matches');box.style.display='block';box.innerHTML='<b>Loading matches for '+esc(name)+'…</b>';
- try{
-  await loadManualMatches();
-  let season=document.getElementById('season').value,comp=norm(document.getElementById('comp').value),opp=norm(document.getElementById('opp').value);
-  let rows=(MANUAL_MATCHES||[]).filter(m=>m.home_team===teamId||m.away_team===teamId);
-  let out=rows.filter(m=>{
-   let oppName=(m.home_team===teamId)?m.away_team:m.home_team;
-   return (!season||String(m.date||'').startsWith(season))&&(!comp||norm(m.competition).includes(comp))&&(!opp||norm(oppName).includes(opp));
-  }).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
-  box.innerHTML=out.length?('<h3>'+esc(name)+' matches ('+out.length+')</h3>'+out.map(m=>{
-   let oppName=(m.home_team===teamId)?m.away_team:m.home_team;
-   return '<div class="result"><b>'+esc(name)+' vs '+esc(oppName)+'</b><div class="muted">'+fmt(m.date)+' · '+esc(m.competition||'')+'</div>'+
-   '<button type="button" class="btn-load-match" data-source="manual" data-match-id="'+esc(m.id)+'">Load Match</button></div>';
-  }).join('')):'<p>No matches found for those filters.</p>';
- }catch(e){box.innerHTML='<b>Could not load matches for this team.</b><p class="muted">'+esc(e.message)+'</p>'}
+ let sources;
+ try{sources=JSON.parse(sourcesJson)}catch(e){sources=[]}
+ let season=document.getElementById('season').value,comp=norm(document.getElementById('comp').value),opp=norm(document.getElementById('opp').value);
+ let all=[];
+ await Promise.all(sources.map(async s=>{
+  try{
+   let items;
+   if(s.source==='club')items=await fetchClubMatches(s.id);
+   else if(s.source==='intl')items=await fetchIntlMatches(s.id);
+   else if(s.source==='espn')items=await fetchEspnMatches(s.id);
+   else if(s.source==='manual')items=await fetchManualMatches(s.id);
+   else items=[];
+   all.push(...items);
+  }catch(e){/* one source failing shouldn't block the others */}
+ }));
+ let out=all.filter(m=>(!season||String(m.date||'').startsWith(season))&&(!comp||norm(m.competition).includes(comp))&&(!opp||norm(m.opponent).includes(opp)))
+  .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+ box.innerHTML=out.length?('<h3>'+esc(name)+' matches ('+out.length+')</h3>'+out.slice(0,50).map(m=>
+  '<div class="result"><b>'+esc(name)+' vs '+esc(m.opponent)+'</b><div class="muted">'+fmt(m.date)+' · '+esc(m.competition)+' · '+esc(sourceLabel(m.source))+'</div>'+
+  '<button type="button" class="btn-load-match" data-source="'+m.source+'" data-match-id="'+esc(m.matchId)+'" data-team-id="'+esc(m.teamId||'')+'" data-opp-id="'+esc(m.oppId||'')+'">Load Match</button></div>'
+ ).join('')):'<p>No matches found for those filters.</p>';
 }
 
 function load(source,matchId,teamId,oppId){
@@ -471,7 +469,7 @@ function drawStatsChart(c,x){
  });
  x.textAlign='left';
 }
-function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v24.png';a.href=document.getElementById('cv').toDataURL();a.click()}
+function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v25.png';a.href=document.getElementById('cv').toDataURL();a.click()}
 
 // ---- wiring: everything below binds events with addEventListener instead
 // of inline onclick, including a single delegated listener for buttons
@@ -490,7 +488,7 @@ document.querySelectorAll('nav [data-tab]').forEach(btn=>btn.addEventListener('c
 
 document.body.addEventListener('click',function(e){
  let findBtn=e.target.closest('.btn-find-matches');
- if(findBtn){matches(findBtn.dataset.source,findBtn.dataset.teamId,findBtn.dataset.teamName);return}
+ if(findBtn){matches(findBtn.dataset.sources,findBtn.dataset.teamName);return}
  let loadBtn=e.target.closest('.btn-load-match');
  if(loadBtn){load(loadBtn.dataset.source,loadBtn.dataset.matchId,loadBtn.dataset.teamId,loadBtn.dataset.oppId);return}
 });
