@@ -1,8 +1,8 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0d0a"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v23</title><style>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0d0a"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v24</title><style>
 body{margin:0;font-family:system-ui;background:#0a0d0a;color:#f3f3ee}header{padding:16px;background:#0e130e;border-bottom:2px solid #1f6b3d}h1{margin:0;font-size:23px;color:#f3f3ee}.sub{color:#c9a227;font-size:12px}nav{display:flex;gap:7px;overflow:auto;padding:9px;background:#101710;position:sticky;top:0;border-bottom:1px solid #23361f}button{border:0;border-radius:9px;padding:10px 13px;background:#1f6b3d;color:#f9f6ea;font-weight:700}button:active{background:#164a2a}.tab{display:none;max-width:1100px;margin:auto;padding:14px}.tab.active{display:block}.card{background:#121a11;border:1px solid #2e4a2e;border-radius:14px;padding:14px;margin-bottom:12px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px}input,select{background:#0a0d0a;color:#f3f3ee;border:1px solid #3a5a3a;border-radius:8px;padding:10px;width:100%;box-sizing:border-box}.field{display:flex;flex-direction:column;gap:5px}.field label,.muted{color:#9fb39a}.row{display:flex;gap:8px;flex-wrap:wrap}.result{padding:12px;border:1px solid #2e4a2e;border-radius:10px;margin:8px 0}.score{text-align:center;font-size:34px;font-weight:800;color:#d9a521}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px;border-bottom:1px solid #2e4a2e;text-align:left}th{color:#d9a521}.rating{font-size:26px;font-weight:800;color:#d9a521}.badge{display:inline-block;padding:4px 7px;border-radius:999px;background:#4a3a0f;color:#e8c968;font-size:11px}
 h2{color:#d9a521}h3{color:#f3f3ee}a{color:#d9a521}
 </style></head><body>
-<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v23 · Proper Rugby Match Search & Analysis · all teams</div></header>
+<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v24 · Proper Rugby Match Search & Analysis · all teams</div></header>
 <nav>
 <button type="button" data-tab="search">🔎 Find Match</button>
 <button type="button" data-tab="analysis">📊 Analysis</button>
@@ -64,9 +64,31 @@ function espnTeamList(){
 
 // Manual entries: a simple plain-text file (data/manual/matches.txt), one
 // match per line, pipe-separated:
-//   date|competition|home team|away team|home score|away score
-// A malformed line is just skipped, never treated as a fatal error - one
-// typo can't break the whole file the way a JSON syntax error would.
+//   date|competition|home team|away team|home score|away score|stats
+// The 7th field (stats) is optional. When present it looks like:
+//   home:key=val,key=val;away:key=val,key=val
+// e.g. home:tries=2,tackles=110;away:tries=1,tackles=95
+// A malformed line - or a malformed stats field within an otherwise-good
+// line - is just skipped (the stats, or the whole line), never treated as
+// a fatal error. One typo can't break the whole file the way a JSON
+// syntax error would.
+function parseManualStatsField(field){
+ let home={},away={};
+ if(!field)return{home,away};
+ field.split(';').forEach(chunk=>{
+  chunk=chunk.trim();if(!chunk)return;
+  let idx=chunk.indexOf(':');if(idx<0)return;
+  let side=chunk.slice(0,idx).trim().toLowerCase();
+  let target=side==='home'?home:side==='away'?away:null;
+  if(!target)return;
+  chunk.slice(idx+1).split(',').forEach(pair=>{
+   let eq=pair.indexOf('=');if(eq<0)return;
+   let key=pair.slice(0,eq).trim(),val=parseFloat(pair.slice(eq+1).trim());
+   if(key&&!isNaN(val))target[key]=val;
+  });
+ });
+ return{home,away};
+}
 function parseManualMatches(text){
  let lines=String(text||'').split('\n');
  let out=[];
@@ -75,10 +97,11 @@ function parseManualMatches(text){
   if(!line||line.startsWith('#'))return;
   let parts=line.split('|').map(s=>s.trim());
   if(parts.length<6)return;
-  let [date,competition,home,away,hs,as]=parts;
+  let [date,competition,home,away,hs,as,statsField]=parts;
   let homeScore=parseFloat(hs),awayScore=parseFloat(as);
   if(!date||!home||!away||isNaN(homeScore)||isNaN(awayScore))return;
-  out.push({id:'manual'+i,date,competition,home_team:home,away_team:away,home_score:homeScore,away_score:awayScore,home:{},away:{}});
+  let stats=parseManualStatsField(statsField);
+  out.push({id:'manual'+i,date,competition,home_team:home,away_team:away,home_score:homeScore,away_score:awayScore,home:stats.home,away:stats.away});
  });
  return out;
 }
@@ -448,7 +471,7 @@ function drawStatsChart(c,x){
  });
  x.textAlign='left';
 }
-function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v23.png';a.href=document.getElementById('cv').toDataURL();a.click()}
+function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v24.png';a.href=document.getElementById('cv').toDataURL();a.click()}
 
 // ---- wiring: everything below binds events with addEventListener instead
 // of inline onclick, including a single delegated listener for buttons

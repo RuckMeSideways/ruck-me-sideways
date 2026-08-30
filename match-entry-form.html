@@ -1,0 +1,144 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ruck Me Sideways - Add Manual Match</title><style>
+body{margin:0;font-family:system-ui;background:#0a0d0a;color:#f3f3ee;padding:16px}
+h1{font-size:20px;color:#d9a521}
+h2{font-size:16px;color:#d9a521;margin:18px 0 8px}
+p.muted{color:#9fb39a;font-size:13px}
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+label{color:#9fb39a;font-size:13px}
+input{background:#0a0d0a;color:#f3f3ee;border:1px solid #3a5a3a;border-radius:8px;padding:10px;font-size:16px}
+button{border:0;border-radius:9px;padding:12px 16px;background:#1f6b3d;color:#f9f6ea;font-weight:700;font-size:15px;margin-top:6px}
+.row{display:flex;gap:8px}
+.row>.field{flex:1}
+#out{background:#121a11;border:1px solid #2e4a2e;border-radius:10px;padding:12px;margin-top:16px;white-space:pre-wrap;word-break:break-all;font-family:monospace;font-size:13px;min-height:40px}
+.list{margin-top:16px}
+.entry{background:#121a11;border:1px solid #2e4a2e;border-radius:10px;padding:10px;margin-bottom:8px;font-size:14px}
+.entry button,.statrow button{background:#7a2f1f;padding:6px 10px;font-size:12px;margin-top:6px}
+.statrow{background:#121a11;border:1px solid #2e4a2e;border-radius:8px;padding:8px;margin-bottom:6px;font-size:13px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.card{background:#0e130e;border:1px solid #2e4a2e;border-radius:12px;padding:12px;margin-top:14px}
+</style></head><body>
+<h1>🏉 Add a Manual Match</h1>
+<p class="muted">For matches that don't show up in Ruck Me Sideways' automatic search. Fill in the match details, optionally add stats one at a time, then tap "Add Match to List". When you've added everything, copy the result at the bottom into <code>data/manual/matches.txt</code> on GitHub (paste it under the existing lines, don't replace the whole file).</p>
+
+<div class="field"><label>Date</label><input type="date" id="date"></div>
+<div class="field"><label>Competition / series name</label><input id="comp" placeholder="e.g. Rugby's Greatest Rivalry"></div>
+<div class="row">
+<div class="field"><label>Home team</label><input id="home" placeholder="e.g. South Africa"></div>
+<div class="field"><label>Away team</label><input id="away" placeholder="e.g. New Zealand"></div>
+</div>
+<div class="row">
+<div class="field"><label>Home score</label><input type="number" id="hs"></div>
+<div class="field"><label>Away score</label><input type="number" id="as"></div>
+</div>
+
+<div class="card">
+<h2>Stats (optional)</h2>
+<p class="muted">Add as many as you like - tries, tackles, metres, whatever you have. Leave this section empty if you only want the score.</p>
+<div class="field"><label>Stat name</label><input id="statName" placeholder="e.g. Tries, Tackles, Missed Tackles"></div>
+<div class="row">
+<div class="field"><label>Home value</label><input type="number" id="statHome"></div>
+<div class="field"><label>Away value</label><input type="number" id="statAway"></div>
+</div>
+<button type="button" id="btnAddStat">+ Add stat to this match</button>
+<div id="statList" style="margin-top:10px"></div>
+</div>
+
+<button type="button" id="btnAdd" style="margin-top:16px">✓ Add Match to List</button>
+
+<div class="list" id="list"></div>
+
+<div class="field" style="margin-top:16px"><label>Copy this into matches.txt (append to the end of the file):</label></div>
+<div id="out">Nothing added yet.</div>
+<button type="button" id="btnCopy">Copy to clipboard</button>
+
+<script>
+let entries=[];      // completed matches, ready to export
+let currentStats=[];  // stats being built up for the match currently being entered
+function esc(s){return String(s??'')}
+
+// "Missed Tackles" -> "missedTackles", so it plays nicely with the app's
+// camelCase stat-label formatting.
+function toStatKey(name){
+ let words=name.trim().split(/\s+/).filter(Boolean);
+ if(!words.length)return '';
+ return words[0].toLowerCase()+words.slice(1).map(w=>w[0].toUpperCase()+w.slice(1).toLowerCase()).join('');
+}
+
+function renderStatList(){
+ document.getElementById('statList').innerHTML=currentStats.map((s,i)=>
+  '<div class="statrow"><span>'+esc(s.name)+': '+esc(s.home)+' - '+esc(s.away)+'</span>'+
+  '<button type="button" data-i="'+i+'" class="btnRemoveStat">Remove</button></div>'
+ ).join('');
+}
+
+document.getElementById('btnAddStat').addEventListener('click',function(){
+ let name=document.getElementById('statName').value.trim();
+ let home=document.getElementById('statHome').value;
+ let away=document.getElementById('statAway').value;
+ if(!name||home===''||away===''){alert('Fill in the stat name and both values first.');return}
+ if(name.includes('|')||name.includes(':')||name.includes('=')||name.includes(',')||name.includes(';')){
+  alert('Stat names can\'t contain | : = , or ; - please use plain words.');
+  return;
+ }
+ currentStats.push({name,key:toStatKey(name),home,away});
+ document.getElementById('statName').value='';
+ document.getElementById('statHome').value='';
+ document.getElementById('statAway').value='';
+ renderStatList();
+});
+document.getElementById('statList').addEventListener('click',function(e){
+ let btn=e.target.closest('.btnRemoveStat');
+ if(btn){currentStats.splice(Number(btn.dataset.i),1);renderStatList();}
+});
+
+function render(){
+ document.getElementById('list').innerHTML=entries.map((e,i)=>
+  '<div class="entry">'+esc(e.date)+' · '+esc(e.comp)+'<br><b>'+esc(e.home)+' '+esc(e.hs)+' - '+esc(e.as)+' '+esc(e.away)+'</b>'+
+  (e.stats.length?'<br><span style="color:#9fb39a">'+e.stats.map(s=>esc(s.name)).join(', ')+'</span>':'')+'<br>'+
+  '<button type="button" data-i="'+i+'" class="btnRemove">Remove</button></div>'
+ ).join('');
+ document.getElementById('out').textContent=entries.length?entries.map(e=>{
+  let line=e.date+'|'+e.comp+'|'+e.home+'|'+e.away+'|'+e.hs+'|'+e.as;
+  if(e.stats.length){
+   let homeStats=e.stats.map(s=>s.key+'='+s.home).join(',');
+   let awayStats=e.stats.map(s=>s.key+'='+s.away).join(',');
+   line+='|home:'+homeStats+';away:'+awayStats;
+  }
+  return line;
+ }).join('\n'):'Nothing added yet.';
+}
+document.getElementById('btnAdd').addEventListener('click',function(){
+ let date=document.getElementById('date').value;
+ let comp=document.getElementById('comp').value.trim();
+ let home=document.getElementById('home').value.trim();
+ let away=document.getElementById('away').value.trim();
+ let hs=document.getElementById('hs').value;
+ let as=document.getElementById('as').value;
+ if(!date||!comp||!home||!away||hs===''||as===''){
+  alert('Please fill in every match field before adding.');
+  return;
+ }
+ if(comp.includes('|')||home.includes('|')||away.includes('|')){
+  alert('Team/competition names can\'t contain the | character - please remove it.');
+  return;
+ }
+ entries.push({date,comp,home,away,hs,as,stats:currentStats});
+ document.getElementById('comp').value='';
+ document.getElementById('home').value='';
+ document.getElementById('away').value='';
+ document.getElementById('hs').value='';
+ document.getElementById('as').value='';
+ currentStats=[];
+ renderStatList();
+ render();
+});
+document.getElementById('list').addEventListener('click',function(e){
+ let btn=e.target.closest('.btnRemove');
+ if(btn){entries.splice(Number(btn.dataset.i),1);render();}
+});
+document.getElementById('btnCopy').addEventListener('click',function(){
+ let text=document.getElementById('out').textContent;
+ if(!entries.length){alert('Nothing to copy yet - add a match first.');return}
+ navigator.clipboard.writeText(text).then(()=>alert('Copied! Paste it at the end of matches.txt on GitHub.'));
+});
+</script>
+</body></html>
