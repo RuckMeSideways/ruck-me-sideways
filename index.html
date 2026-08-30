@@ -1,8 +1,8 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0d0a"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v26</title><style>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0d0a"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v27</title><style>
 body{margin:0;font-family:system-ui;background:#0a0d0a;color:#f3f3ee}header{padding:16px;background:#0e130e;border-bottom:2px solid #1f6b3d}h1{margin:0;font-size:23px;color:#f3f3ee}.sub{color:#c9a227;font-size:12px}nav{display:flex;gap:7px;overflow:auto;padding:9px;background:#101710;position:sticky;top:0;border-bottom:1px solid #23361f}button{border:0;border-radius:9px;padding:10px 13px;background:#1f6b3d;color:#f9f6ea;font-weight:700}button:active{background:#164a2a}.tab{display:none;max-width:1100px;margin:auto;padding:14px}.tab.active{display:block}.card{background:#121a11;border:1px solid #2e4a2e;border-radius:14px;padding:14px;margin-bottom:12px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px}input,select{background:#0a0d0a;color:#f3f3ee;border:1px solid #3a5a3a;border-radius:8px;padding:10px;width:100%;box-sizing:border-box}.field{display:flex;flex-direction:column;gap:5px}.field label,.muted{color:#9fb39a}.row{display:flex;gap:8px;flex-wrap:wrap}.result{padding:12px;border:1px solid #2e4a2e;border-radius:10px;margin:8px 0}.score{text-align:center;font-size:34px;font-weight:800;color:#d9a521}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px;border-bottom:1px solid #2e4a2e;text-align:left}th{color:#d9a521}.rating{font-size:26px;font-weight:800;color:#d9a521}.badge{display:inline-block;padding:4px 7px;border-radius:999px;background:#4a3a0f;color:#e8c968;font-size:11px}
 h2{color:#d9a521}h3{color:#f3f3ee}a{color:#d9a521}
 </style></head><body>
-<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v26 · Proper Rugby Match Search & Analysis · all teams</div></header>
+<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v27 · Proper Rugby Match Search & Analysis · all teams</div></header>
 <nav>
 <button type="button" data-tab="search">🔎 Find Match</button>
 <button type="button" data-tab="analysis">📊 Analysis</button>
@@ -17,9 +17,11 @@ h2{color:#d9a521}h3{color:#f3f3ee}a{color:#d9a521}
 <div class="field"><label>Season</label><select id="season"><option value="">Any</option><option>2026</option><option>2025</option><option>2024</option><option>2023</option><option>2022</option></select></div>
 <div class="field"><label>Competition</label><input id="comp" placeholder="International Test Match, URC..."></div>
 </div>
-<div class="row" style="margin-top:10px"><button type="button" id="btnFindTeam">Find Team</button><button type="button" id="btnDemo">Demo</button></div>
+<div class="row" style="margin-top:10px"><button type="button" id="btnFindTeam">Find Team</button><button type="button" id="btnStandings">🏆 Standings</button><button type="button" id="btnDemo">Demo</button></div>
+<p class="muted" style="font-size:11px">Standings uses the Competition field above (required) and Season (optional) - built from cached international match data, not an official league table, and doesn't include bonus points.</p>
 </div>
 <div id="teams" class="card"><span class="muted">Enter a team name.</span></div>
+<div id="standings" class="card" style="display:none"></div>
 <div id="matches" class="card" style="display:none"></div>
 </section>
 <section id="analysis" class="tab"><div class="card"><h2 id="title">No match loaded</h2><div id="meta" class="muted"></div><div id="score" class="score">—</div><div class="row" style="margin-top:10px;justify-content:center"><button type="button" id="btnSwapNames">⇄ Swap Names</button><button type="button" id="btnSwapScore">⇄ Swap Score</button><button type="button" id="btnSwapStats">⇄ Swap Stats</button></div><div class="muted" style="text-align:center;margin-top:6px;font-size:11px">If a match's team names, score, or stats are mixed up in the source data, use these to fix just the part that's wrong.</div><div id="swapNote" class="muted" style="text-align:center;margin-top:6px;font-size:12px"></div></div><div id="stats"></div></section>
@@ -172,6 +174,56 @@ function sourceLabel(source){
  return source==='manual'?'Manual':source==='espn'?'ESPN · stats':source==='intl'?'International':'Club';
 }
 
+// Simplified standings table (4pts win, 2pts draw, no bonus points) built
+// from whatever international matches we already have cached for a named
+// competition. Club competitions aren't included here - their match index
+// doesn't carry scores directly (those live in the per-team stats files),
+// so a club standings table would need a different, more expensive lookup.
+function buildStandings(){
+ let compVal=document.getElementById('comp').value.trim();
+ if(!compVal){alert('Please type a competition name in the Competition field first.');return}
+ let season=document.getElementById('season').value;
+ let box=document.getElementById('standings');
+ box.style.display='block';
+ box.innerHTML='<b>Building standings…</b>';
+ Promise.all([loadIntlRegistries().catch(()=>{}),loadEspnRegistry().catch(()=>{})]).then(()=>{
+  let comp=norm(compVal);
+  let rows=[];
+  (INTL_MATCHES||[]).forEach(m=>{
+   if(!norm(m.league?.name||'').includes(comp))return;
+   if(season&&String(m.league?.season||'')!==season)return;
+   let parts=String(m.state?.score||'').split(' - ').map(s=>parseInt(s.trim(),10));
+   let hs=parts[0],as=parts[1];
+   if(!Number.isFinite(hs)||!Number.isFinite(as))return;
+   rows.push({home:m.homeTeam?.name,away:m.awayTeam?.name,homeScore:hs,awayScore:as});
+  });
+  (ESPN_EVENTS||[]).forEach(e=>{
+   if(!norm(e.league_name||'').includes(comp))return;
+   if(season&&!String(e.date||'').startsWith(season))return;
+   if(typeof e.home_score!=='number'||typeof e.away_score!=='number')return;
+   rows.push({home:e.home_team_name,away:e.away_team_name,homeScore:e.home_score,awayScore:e.away_score});
+  });
+  if(!rows.length){box.innerHTML='<b>No matches found.</b><p class="muted">Try a different competition name, or clear the season filter.</p>';return}
+  let table={};
+  function ensure(name){if(!table[name])table[name]={name,played:0,won:0,drawn:0,lost:0,pf:0,pa:0};return table[name]}
+  rows.forEach(r=>{
+   let h=ensure(r.home),a=ensure(r.away);
+   h.played++;a.played++;
+   h.pf+=r.homeScore;h.pa+=r.awayScore;
+   a.pf+=r.awayScore;a.pa+=r.homeScore;
+   if(r.homeScore>r.awayScore){h.won++;a.lost++}
+   else if(r.homeScore<r.awayScore){a.won++;h.lost++}
+   else{h.drawn++;a.drawn++}
+  });
+  let teams=Object.values(table).map(t=>({...t,pts:t.won*4+t.drawn*2,diff:t.pf-t.pa}));
+  teams.sort((a,b)=>b.pts-a.pts||b.diff-a.diff);
+  box.innerHTML='<h3>'+esc(compVal)+(season?' '+esc(season):'')+' standings</h3>'+
+   '<table><tr><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>+/-</th><th>Pts</th></tr>'+
+   teams.map(t=>'<tr><td>'+esc(t.name)+'</td><td>'+t.played+'</td><td>'+t.won+'</td><td>'+t.drawn+'</td><td>'+t.lost+'</td><td>'+(t.diff>0?'+':'')+t.diff+'</td><td><b>'+t.pts+'</b></td></tr>').join('')+
+   '</table><p class="muted" style="font-size:11px;margin-top:8px">Simplified table (4 pts win, 2 pts draw, no bonus points) built from cached data - not an official standings source.</p>';
+ }).catch(e=>{box.innerHTML='<b>Could not build standings.</b><p class="muted">'+esc(e.message)+'</p>'});
+}
+
 // Each fetch* function below returns a plain array of normalized match
 // records (not DOM) - {source, matchId, opponent, date, competition, ...}
 // - so the unified matches() function can pull from several sources at
@@ -182,7 +234,8 @@ async function fetchClubMatches(teamId){
  if(!teamStatsCache[teamId])teamStatsCache[teamId]=await get(RAW+'team-stats/'+teamId+'.json');
  return teamStatsCache[teamId].map(r=>({
   source:'club',matchId:r.match_id,teamId,oppId:r.team_vs_id,
-  opponent:r.team_vs,date:r.game_date,competition:compName(r.competition_id)
+  opponent:r.team_vs,date:r.game_date,competition:compName(r.competition_id),
+  selfScore:r.score,oppScore:r.team_vs_score
  }));
 }
 async function fetchIntlMatches(teamId){
@@ -190,7 +243,10 @@ async function fetchIntlMatches(teamId){
  return (INTL_MATCHES||[]).filter(m=>(m.homeTeam&&String(m.homeTeam.id)===String(teamId))||(m.awayTeam&&String(m.awayTeam.id)===String(teamId)))
   .map(m=>{
    let isHome=m.homeTeam&&String(m.homeTeam.id)===String(teamId);
-   return {source:'intl',matchId:m.id,opponent:isHome?m.awayTeam?.name:m.homeTeam?.name,date:m.date,competition:(m.league?.name||'')+(m.league?.season?' '+m.league.season:'')};
+   let parts=String(m.state?.score||'').split(' - ').map(s=>parseInt(s.trim(),10));
+   let homeScore=Number.isFinite(parts[0])?parts[0]:null,awayScore=Number.isFinite(parts[1])?parts[1]:null;
+   return {source:'intl',matchId:m.id,opponent:isHome?m.awayTeam?.name:m.homeTeam?.name,date:m.date,competition:(m.league?.name||'')+(m.league?.season?' '+m.league.season:''),
+    selfScore:isHome?homeScore:awayScore,oppScore:isHome?awayScore:homeScore};
   });
 }
 async function fetchEspnMatches(teamId){
@@ -198,13 +254,46 @@ async function fetchEspnMatches(teamId){
  return (ESPN_EVENTS||[]).filter(e=>String(e.home_team_id)===String(teamId)||String(e.away_team_id)===String(teamId))
   .map(e=>{
    let isHome=String(e.home_team_id)===String(teamId);
-   return {source:'espn',matchId:e.event_id,opponent:isHome?e.away_team_name:e.home_team_name,date:e.date,competition:e.league_name};
+   return {source:'espn',matchId:e.event_id,opponent:isHome?e.away_team_name:e.home_team_name,date:e.date,competition:e.league_name,
+    selfScore:isHome?e.home_score:e.away_score,oppScore:isHome?e.away_score:e.home_score};
   });
 }
 async function fetchManualMatches(teamName){
  await loadManualMatches();
  return (MANUAL_MATCHES||[]).filter(m=>m.home_team===teamName||m.away_team===teamName)
-  .map(m=>({source:'manual',matchId:m.id,opponent:m.home_team===teamName?m.away_team:m.home_team,date:m.date,competition:m.competition||''}));
+  .map(m=>{
+   let isHome=m.home_team===teamName;
+   return {source:'manual',matchId:m.id,opponent:isHome?m.away_team:m.home_team,date:m.date,competition:m.competition||'',
+    selfScore:isHome?m.home_score:m.away_score,oppScore:isHome?m.away_score:m.home_score};
+  });
+}
+
+// Result: 'W'/'L'/'D', or null if either score is missing.
+function matchResult(m){
+ if(m.selfScore==null||m.oppScore==null)return null;
+ if(m.selfScore>m.oppScore)return 'W';
+ if(m.selfScore<m.oppScore)return 'L';
+ return 'D';
+}
+function formHtml(all){
+ let scored=all.filter(m=>matchResult(m)).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
+ if(!scored.length)return '';
+ let recent=scored.slice(0,5);
+ let strip=recent.map(m=>matchResult(m)).reverse().join(' ');
+ let avgFor=(recent.reduce((s,m)=>s+m.selfScore,0)/recent.length).toFixed(0);
+ let avgAgainst=(recent.reduce((s,m)=>s+m.oppScore,0)/recent.length).toFixed(0);
+ return '<div class="card"><b>Recent form</b> (last '+recent.length+'): '+esc(strip)+'<br><span class="muted">Avg '+avgFor+'–'+avgAgainst+' per match</span></div>';
+}
+function headToHeadHtml(all,opponentFilter){
+ if(!opponentFilter)return '';
+ let vs=all.filter(m=>matchResult(m)&&norm(m.opponent).includes(opponentFilter));
+ if(!vs.length)return '';
+ let w=vs.filter(m=>matchResult(m)==='W').length;
+ let l=vs.filter(m=>matchResult(m)==='L').length;
+ let d=vs.filter(m=>matchResult(m)==='D').length;
+ let last=vs.slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))[0];
+ return '<div class="card"><b>All-time head-to-head</b>: '+w+'W '+d+'D '+l+'L ('+vs.length+' meeting'+(vs.length===1?'':'s')+')'+
+  (last?'<br><span class="muted">Last: '+fmt(last.date)+' · '+(matchResult(last)==='W'?'Won':matchResult(last)==='L'?'Lost':'Drew')+' '+last.selfScore+'–'+last.oppScore+'</span>':'')+'</div>';
 }
 
 async function matches(sourcesJson,name){
@@ -224,12 +313,15 @@ async function matches(sourcesJson,name){
    all.push(...items);
   }catch(e){/* one source failing shouldn't block the others */}
  }));
+ let summary=formHtml(all)+headToHeadHtml(all,opp);
  let out=all.filter(m=>(!season||String(m.date||'').startsWith(season))&&(!comp||norm(m.competition).includes(comp))&&(!opp||norm(m.opponent).includes(opp)))
   .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
- box.innerHTML=out.length?('<h3>'+esc(name)+' matches ('+out.length+')</h3>'+out.slice(0,50).map(m=>
-  '<div class="result"><b>'+esc(name)+' vs '+esc(m.opponent)+'</b><div class="muted">'+fmt(m.date)+' · '+esc(m.competition)+' · '+esc(sourceLabel(m.source))+'</div>'+
+ let list=out.length?('<h3>'+esc(name)+' matches ('+out.length+')</h3>'+out.slice(0,50).map(m=>
+  '<div class="result"><b>'+esc(name)+' vs '+esc(m.opponent)+'</b><div class="muted">'+fmt(m.date)+' · '+esc(m.competition)+' · '+esc(sourceLabel(m.source))+
+  (matchResult(m)?' · '+(m.selfScore)+'–'+(m.oppScore):'')+'</div>'+
   '<button type="button" class="btn-load-match" data-source="'+m.source+'" data-match-id="'+esc(m.matchId)+'" data-team-id="'+esc(m.teamId||'')+'" data-opp-id="'+esc(m.oppId||'')+'">Load Match</button></div>'
  ).join('')):'<p>No matches found for those filters.</p>';
+ box.innerHTML=summary+list;
 }
 
 function load(source,matchId,teamId,oppId){
@@ -500,12 +592,13 @@ function drawStatsChart(c,x){
  });
  x.textAlign='left';
 }
-function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v26.png';a.href=document.getElementById('cv').toDataURL();a.click()}
+function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v27.png';a.href=document.getElementById('cv').toDataURL();a.click()}
 
 // ---- wiring: everything below binds events with addEventListener instead
 // of inline onclick, including a single delegated listener for buttons
 // that get created dynamically (Find Matches / Load Match) ----
 document.getElementById('btnFindTeam').addEventListener('click',search);
+document.getElementById('btnStandings').addEventListener('click',buildStandings);
 document.getElementById('btnDemo').addEventListener('click',demo);
 document.getElementById('btnGScore').addEventListener('click',()=>graphic('score'));
 document.getElementById('btnGPlayers').addEventListener('click',()=>graphic('players'));
