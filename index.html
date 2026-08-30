@@ -1,8 +1,8 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0d0a"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v22</title><style>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0d0a"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v23</title><style>
 body{margin:0;font-family:system-ui;background:#0a0d0a;color:#f3f3ee}header{padding:16px;background:#0e130e;border-bottom:2px solid #1f6b3d}h1{margin:0;font-size:23px;color:#f3f3ee}.sub{color:#c9a227;font-size:12px}nav{display:flex;gap:7px;overflow:auto;padding:9px;background:#101710;position:sticky;top:0;border-bottom:1px solid #23361f}button{border:0;border-radius:9px;padding:10px 13px;background:#1f6b3d;color:#f9f6ea;font-weight:700}button:active{background:#164a2a}.tab{display:none;max-width:1100px;margin:auto;padding:14px}.tab.active{display:block}.card{background:#121a11;border:1px solid #2e4a2e;border-radius:14px;padding:14px;margin-bottom:12px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px}input,select{background:#0a0d0a;color:#f3f3ee;border:1px solid #3a5a3a;border-radius:8px;padding:10px;width:100%;box-sizing:border-box}.field{display:flex;flex-direction:column;gap:5px}.field label,.muted{color:#9fb39a}.row{display:flex;gap:8px;flex-wrap:wrap}.result{padding:12px;border:1px solid #2e4a2e;border-radius:10px;margin:8px 0}.score{text-align:center;font-size:34px;font-weight:800;color:#d9a521}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px;border-bottom:1px solid #2e4a2e;text-align:left}th{color:#d9a521}.rating{font-size:26px;font-weight:800;color:#d9a521}.badge{display:inline-block;padding:4px 7px;border-radius:999px;background:#4a3a0f;color:#e8c968;font-size:11px}
 h2{color:#d9a521}h3{color:#f3f3ee}a{color:#d9a521}
 </style></head><body>
-<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v22 · Proper Rugby Match Search & Analysis · all teams</div></header>
+<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v23 · Proper Rugby Match Search & Analysis · all teams</div></header>
 <nav>
 <button type="button" data-tab="search">🔎 Find Match</button>
 <button type="button" data-tab="analysis">📊 Analysis</button>
@@ -24,7 +24,7 @@ h2{color:#d9a521}h3{color:#f3f3ee}a{color:#d9a521}
 </section>
 <section id="analysis" class="tab"><div class="card"><h2 id="title">No match loaded</h2><div id="meta" class="muted"></div><div id="score" class="score">—</div><div class="row" style="margin-top:10px;justify-content:center"><button type="button" id="btnSwapNames">⇄ Swap Names</button><button type="button" id="btnSwapScore">⇄ Swap Score</button><button type="button" id="btnSwapStats">⇄ Swap Stats</button></div><div class="muted" style="text-align:center;margin-top:6px;font-size:11px">If a match's team names, score, or stats are mixed up in the source data, use these to fix just the part that's wrong.</div><div id="swapNote" class="muted" style="text-align:center;margin-top:6px;font-size:12px"></div></div><div id="stats"></div></section>
 <section id="players" class="tab"><div class="card"><h2>Player Ratings</h2><div id="summary" class="muted">Load a match first.</div></div><div class="card"><div id="ptable"></div></div></section>
-<section id="graphics" class="tab"><div class="card"><h2>YouTube Graphic</h2><div class="row"><button type="button" id="btnGScore">Score</button><button type="button" id="btnGPlayers">Player of Match</button><button type="button" id="btnGDefence">Defence</button><button type="button" id="btnSave">Download PNG</button></div><canvas id="cv" width="1280" height="720" style="width:100%;margin-top:12px"></canvas></div></section>
+<section id="graphics" class="tab"><div class="card"><h2>YouTube Graphic</h2><div class="row"><button type="button" id="btnGScore">Score</button><button type="button" id="btnGPlayers">Player of Match</button><button type="button" id="btnGDefence">Defence</button><button type="button" id="btnGStats">📊 Stats Chart</button><button type="button" id="btnSave">Download PNG</button></div><canvas id="cv" width="1280" height="720" style="width:100%;margin-top:12px"></canvas></div></section>
 <script>
 // ---- point this at YOUR data bridge repo (see .github/workflows/update-data.yml) ----
 const RAW='https://raw.githubusercontent.com/RuckMeSideways/ruck-me-sideways/main/data/';
@@ -381,28 +381,74 @@ function swapStats(){
  document.getElementById('swapNote').textContent='Stats columns swapped manually.';
 }
 
+// Shared by both the on-screen stats table and the stats-chart graphic,
+// so they can never disagree about which stats to show or how to format
+// them (percent vs raw number).
+function currentStatKeys(){
+ let h=current.home||{},a=current.away||{};
+ if(current.statOrder){
+  return current.statOrder.filter(k=>typeof h[k]==='number'||typeof a[k]==='number');
+ }
+ return Object.keys(h).filter(k=>!SKIP_KEYS.has(k)&&(typeof h[k]==='number'||typeof a[k]==='number')).sort();
+}
+function fmtStat(k,v){
+ if(v==null)return '—';
+ let pct=current.percentStats||new Set();
+ return pct.has(k)?(v*100).toFixed(0)+'%':String(v);
+}
 function render(){
  document.getElementById('title').textContent=current.home_team+' vs '+current.away_team;
  document.getElementById('meta').textContent=fmt(current.date)+' · '+(current.competition||'');
  document.getElementById('score').textContent=(current.home_score??'—')+' – '+(current.away_score??'—');
  let h=current.home||{},a=current.away||{};
- let pct=current.percentStats||new Set();
- let keys;
- if(current.statOrder){
-  // curated, ordered list (ESPN) - only include stats that actually exist for this match
-  keys=current.statOrder.filter(k=>typeof h[k]==='number'||typeof a[k]==='number');
- }else{
-  // generic - every numeric field present, alphabetical (club data)
-  keys=Object.keys(h).filter(k=>!SKIP_KEYS.has(k)&&(typeof h[k]==='number'||typeof a[k]==='number')).sort();
- }
- let fmtVal=(k,v)=>{if(v==null)return '—';return pct.has(k)?(v*100).toFixed(0)+'%':String(v)};
- let rows=keys.map(k=>[statLabel(k),fmtVal(k,h[k]),fmtVal(k,a[k])]);
+ let keys=currentStatKeys();
+ let rows=keys.map(k=>[statLabel(k),fmtStat(k,h[k]),fmtStat(k,a[k])]);
  document.getElementById('stats').innerHTML=rows.length?('<div class="card"><table><tr><th>Statistic</th><th>'+esc(current.home_team)+'</th><th>'+esc(current.away_team)+'</th></tr>'+rows.map(r=>'<tr><td>'+esc(r[0])+'</td><td>'+esc(r[1])+'</td><td>'+esc(r[2])+'</td></tr>').join('')+'</table></div>'):'<div class="card muted">No box-score stats cached for this match yet — it may be too recent, check back after the next daily update.</div>';
  renderPlayers();
 }
 function renderPlayers(){if(!players.length){document.getElementById('summary').innerHTML='No player-level data supplied.';document.getElementById('ptable').innerHTML='';return}let s=players.map(p=>({...p,r:rating(p)})).sort((a,b)=>b.r-a.r),top=s[0];document.getElementById('summary').innerHTML='<div class="rating">'+esc(top.name)+' — '+top.r.toFixed(1)+'/10</div><span class="badge">Calculated RMS rating</span>';document.getElementById('ptable').innerHTML='<table><tr><th>Player</th><th>Team</th><th>Tackles</th><th>Metres</th><th>TO won</th><th>Rating</th></tr>'+s.map(p=>'<tr><td>'+esc(p.name)+'</td><td>'+esc(p.team)+'</td><td>'+(p.tackles??'—')+'</td><td>'+(p.metres??'—')+'</td><td>'+(p.turnovers_won??'—')+'</td><td><b>'+p.r.toFixed(1)+'</b></td></tr>').join('')+'</table>'}
-function graphic(type){let c=document.getElementById('cv'),x=c.getContext('2d');x.fillStyle='#0a0d0a';x.fillRect(0,0,1280,720);x.fillStyle='#d9a521';x.font='bold 42px system-ui';x.fillText('RUCK ME SIDEWAYS',70,80);if(!current){x.fillStyle='#fff';x.fillText('Load a match first',70,160);return}x.fillStyle='#fff';x.font='bold 48px system-ui';x.fillText(current.home_team+' '+(current.home_score??'—')+' – '+(current.away_score??'—')+' '+current.away_team,70,180);x.fillStyle='#d9a521';x.font='32px system-ui';x.fillText(type==='players'&&players.length?'PLAYER OF THE MATCH':type==='defence'?'DEFENCE BATTLE':'FINAL SCORE',70,330);x.fillStyle='#fff';if(type==='players'&&players.length){let p=players.slice().sort((a,b)=>rating(b)-rating(a))[0];x.font='bold 54px system-ui';x.fillText(p.name+' · '+rating(p).toFixed(1)+'/10',70,410)}else{x.font='30px system-ui';x.fillText('Tackles: '+(current.home?.tackles??'—')+' vs '+(current.away?.tackles??'—'),70,400);x.fillText('Territory: '+(current.home?.territory??'—')+' vs '+(current.away?.territory??'—'),70,450)}}
-function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v22.png';a.href=document.getElementById('cv').toDataURL();a.click()}
+
+function graphic(type){
+ let c=document.getElementById('cv'),x=c.getContext('2d');
+ if(type==='stats')return drawStatsChart(c,x);
+ x.fillStyle='#0a0d0a';x.fillRect(0,0,1280,720);x.fillStyle='#d9a521';x.font='bold 42px system-ui';x.fillText('RUCK ME SIDEWAYS',70,80);if(!current){x.fillStyle='#fff';x.fillText('Load a match first',70,160);return}x.fillStyle='#fff';x.font='bold 48px system-ui';x.fillText(current.home_team+' '+(current.home_score??'—')+' – '+(current.away_score??'—')+' '+current.away_team,70,180);x.fillStyle='#d9a521';x.font='32px system-ui';x.fillText(type==='players'&&players.length?'PLAYER OF THE MATCH':type==='defence'?'DEFENCE BATTLE':'FINAL SCORE',70,330);x.fillStyle='#fff';if(type==='players'&&players.length){let p=players.slice().sort((a,b)=>rating(b)-rating(a))[0];x.font='bold 54px system-ui';x.fillText(p.name+' · '+rating(p).toFixed(1)+'/10',70,410)}else{x.font='30px system-ui';x.fillText('Tackles: '+(current.home?.tackles??'—')+' vs '+(current.away?.tackles??'—'),70,400);x.fillText('Territory: '+(current.home?.territory??'—')+' vs '+(current.away?.territory??'—'),70,450)}
+}
+
+// Horizontal "tug of war" bar chart - one row per stat, home team's bar
+// grows left from the centre line, away team's bar grows right, so the
+// longer bar is instantly the more impressive number regardless of scale.
+function drawStatsChart(c,x){
+ x.fillStyle='#0a0d0a';x.fillRect(0,0,1280,720);
+ x.fillStyle='#d9a521';x.font='bold 40px system-ui';x.textAlign='left';x.fillText('RUCK ME SIDEWAYS',60,60);
+ if(!current){x.fillStyle='#fff';x.font='28px system-ui';x.fillText('Load a match first',60,160);return}
+ x.textAlign='center';
+ x.fillStyle='#fff';x.font='bold 30px system-ui';
+ x.fillText(current.home_team+'   '+(current.home_score??'—')+' – '+(current.away_score??'—')+'   '+current.away_team,640,110);
+ let keys=currentStatKeys().slice(0,6);
+ if(!keys.length){
+  x.fillStyle='#9fb39a';x.font='24px system-ui';x.textAlign='left';
+  x.fillText('No stats available for this match yet.',60,200);
+  return;
+ }
+ let h=current.home||{},a=current.away||{};
+ let top=170,rowH=(720-top-40)/keys.length,maxBar=260,barH=28;
+ keys.forEach((k,i)=>{
+  let y=top+i*rowH+rowH/2;
+  let hv=h[k],av=a[k];
+  let maxV=Math.max(Math.abs(hv||0),Math.abs(av||0),1);
+  let hLen=hv!=null?Math.abs(hv)/maxV*maxBar:0;
+  let aLen=av!=null?Math.abs(av)/maxV*maxBar:0;
+  x.fillStyle='#d9a521';x.font='bold 20px system-ui';x.textAlign='center';
+  x.fillText(statLabel(k),640,y-22);
+  x.fillStyle='#1f6b3d';x.fillRect(640-hLen,y-barH/2,hLen,barH);
+  x.fillStyle='#b9862c';x.fillRect(640,y-barH/2,aLen,barH);
+  x.fillStyle='#fff';x.font='bold 20px system-ui';
+  x.textAlign='right';x.fillText(fmtStat(k,hv),630,y+7);
+  x.textAlign='left';x.fillText(fmtStat(k,av),650,y+7);
+ });
+ x.textAlign='left';
+}
+function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v23.png';a.href=document.getElementById('cv').toDataURL();a.click()}
 
 // ---- wiring: everything below binds events with addEventListener instead
 // of inline onclick, including a single delegated listener for buttons
@@ -412,6 +458,7 @@ document.getElementById('btnDemo').addEventListener('click',demo);
 document.getElementById('btnGScore').addEventListener('click',()=>graphic('score'));
 document.getElementById('btnGPlayers').addEventListener('click',()=>graphic('players'));
 document.getElementById('btnGDefence').addEventListener('click',()=>graphic('defence'));
+document.getElementById('btnGStats').addEventListener('click',()=>graphic('stats'));
 document.getElementById('btnSave').addEventListener('click',save);
 document.getElementById('btnSwapNames').addEventListener('click',swapNames);
 document.getElementById('btnSwapScore').addEventListener('click',swapScore);
