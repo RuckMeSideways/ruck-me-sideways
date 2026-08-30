@@ -1,8 +1,8 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0d0a"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v25</title><style>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0d0a"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v26</title><style>
 body{margin:0;font-family:system-ui;background:#0a0d0a;color:#f3f3ee}header{padding:16px;background:#0e130e;border-bottom:2px solid #1f6b3d}h1{margin:0;font-size:23px;color:#f3f3ee}.sub{color:#c9a227;font-size:12px}nav{display:flex;gap:7px;overflow:auto;padding:9px;background:#101710;position:sticky;top:0;border-bottom:1px solid #23361f}button{border:0;border-radius:9px;padding:10px 13px;background:#1f6b3d;color:#f9f6ea;font-weight:700}button:active{background:#164a2a}.tab{display:none;max-width:1100px;margin:auto;padding:14px}.tab.active{display:block}.card{background:#121a11;border:1px solid #2e4a2e;border-radius:14px;padding:14px;margin-bottom:12px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px}input,select{background:#0a0d0a;color:#f3f3ee;border:1px solid #3a5a3a;border-radius:8px;padding:10px;width:100%;box-sizing:border-box}.field{display:flex;flex-direction:column;gap:5px}.field label,.muted{color:#9fb39a}.row{display:flex;gap:8px;flex-wrap:wrap}.result{padding:12px;border:1px solid #2e4a2e;border-radius:10px;margin:8px 0}.score{text-align:center;font-size:34px;font-weight:800;color:#d9a521}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px;border-bottom:1px solid #2e4a2e;text-align:left}th{color:#d9a521}.rating{font-size:26px;font-weight:800;color:#d9a521}.badge{display:inline-block;padding:4px 7px;border-radius:999px;background:#4a3a0f;color:#e8c968;font-size:11px}
 h2{color:#d9a521}h3{color:#f3f3ee}a{color:#d9a521}
 </style></head><body>
-<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v25 · Proper Rugby Match Search & Analysis · all teams</div></header>
+<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v26 · Proper Rugby Match Search & Analysis · all teams</div></header>
 <nav>
 <button type="button" data-tab="search">🔎 Find Match</button>
 <button type="button" data-tab="analysis">📊 Analysis</button>
@@ -432,7 +432,38 @@ function renderPlayers(){if(!players.length){document.getElementById('summary').
 function graphic(type){
  let c=document.getElementById('cv'),x=c.getContext('2d');
  if(type==='stats')return drawStatsChart(c,x);
- x.fillStyle='#0a0d0a';x.fillRect(0,0,1280,720);x.fillStyle='#d9a521';x.font='bold 42px system-ui';x.fillText('RUCK ME SIDEWAYS',70,80);if(!current){x.fillStyle='#fff';x.fillText('Load a match first',70,160);return}x.fillStyle='#fff';x.font='bold 48px system-ui';x.fillText(current.home_team+' '+(current.home_score??'—')+' – '+(current.away_score??'—')+' '+current.away_team,70,180);x.fillStyle='#d9a521';x.font='32px system-ui';x.fillText(type==='players'&&players.length?'PLAYER OF THE MATCH':type==='defence'?'DEFENCE BATTLE':'FINAL SCORE',70,330);x.fillStyle='#fff';if(type==='players'&&players.length){let p=players.slice().sort((a,b)=>rating(b)-rating(a))[0];x.font='bold 54px system-ui';x.fillText(p.name+' · '+rating(p).toFixed(1)+'/10',70,410)}else{x.font='30px system-ui';x.fillText('Tackles: '+(current.home?.tackles??'—')+' vs '+(current.away?.tackles??'—'),70,400);x.fillText('Territory: '+(current.home?.territory??'—')+' vs '+(current.away?.territory??'—'),70,450)}
+ x.fillStyle='#0a0d0a';x.fillRect(0,0,1280,720);
+ x.fillStyle='#d9a521';x.font='bold 42px system-ui';x.fillText('RUCK ME SIDEWAYS',70,80);
+ if(!current){x.fillStyle='#fff';x.fillText('Load a match first',70,160);return}
+ x.fillStyle='#fff';x.font='bold 48px system-ui';
+ x.fillText(current.home_team+' '+(current.home_score??'—')+' – '+(current.away_score??'—')+' '+current.away_team,70,180);
+ x.fillStyle='#d9a521';x.font='32px system-ui';
+ x.fillText(type==='players'?'PLAYER OF THE MATCH':type==='defence'?'DEFENCE BATTLE':'FINAL SCORE',70,330);
+ x.fillStyle='#fff';x.font='30px system-ui';
+ if(type==='players'){
+  if(players.length){
+   let p=players.slice().sort((a,b)=>rating(b)-rating(a))[0];
+   x.font='bold 54px system-ui';
+   x.fillText(p.name+' · '+rating(p).toFixed(1)+'/10',70,410);
+  }else{
+   x.fillStyle='#9fb39a';
+   x.fillText('No player-level data available for this match.',70,400);
+  }
+ }else if(type==='defence'){
+  // Pull whatever defence-related stats actually exist for this match's
+  // data source, rather than hardcoded field names that only matched
+  // some sources and silently showed "—" for the rest.
+  let keys=currentStatKeys().filter(k=>/tackle|turnover|missed|territor|defend/i.test(k));
+  if(!keys.length){
+   x.fillStyle='#9fb39a';
+   x.fillText('No defensive stats available for this match.',70,400);
+  }else{
+   keys.slice(0,4).forEach((k,i)=>{
+    x.fillStyle='#fff';
+    x.fillText(statLabel(k)+': '+fmtStat(k,current.home?.[k])+' vs '+fmtStat(k,current.away?.[k]),70,400+i*50);
+   });
+  }
+ }
 }
 
 // Horizontal "tug of war" bar chart - one row per stat, home team's bar
@@ -469,7 +500,7 @@ function drawStatsChart(c,x){
  });
  x.textAlign='left';
 }
-function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v25.png';a.href=document.getElementById('cv').toDataURL();a.click()}
+function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v26.png';a.href=document.getElementById('cv').toDataURL();a.click()}
 
 // ---- wiring: everything below binds events with addEventListener instead
 // of inline onclick, including a single delegated listener for buttons
