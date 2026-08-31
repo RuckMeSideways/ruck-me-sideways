@@ -1,0 +1,42 @@
+# Place this file at: .github/workflows/update-espn-players.yml
+# No secret required. Depends on update_espn.py having already run at
+# least once (reads its match-stats/ and events.json output).
+name: Update ESPN player stats
+
+on:
+  schedule:
+    - cron: '45 6 * * *'   # daily, 06:45 UTC - 30 min after the main ESPN bridge
+  workflow_dispatch: {}     # lets you trigger it manually from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  update-espn-players:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Fetch ESPN player stats
+        run: python scripts/update_espn_players.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/espn/player-stats/ data/espn/players.json
+          if git diff --cached --quiet; then
+            echo "No player stats changes"
+          else
+            git commit -m "Update ESPN player stats $(date -u +'%Y-%m-%d')"
+            git push
+          fi
