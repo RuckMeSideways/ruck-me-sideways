@@ -1,8 +1,8 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0d0a"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v27</title><style>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0d0a"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v28</title><style>
 body{margin:0;font-family:system-ui;background:#0a0d0a;color:#f3f3ee}header{padding:16px;background:#0e130e;border-bottom:2px solid #1f6b3d}h1{margin:0;font-size:23px;color:#f3f3ee}.sub{color:#c9a227;font-size:12px}nav{display:flex;gap:7px;overflow:auto;padding:9px;background:#101710;position:sticky;top:0;border-bottom:1px solid #23361f}button{border:0;border-radius:9px;padding:10px 13px;background:#1f6b3d;color:#f9f6ea;font-weight:700}button:active{background:#164a2a}.tab{display:none;max-width:1100px;margin:auto;padding:14px}.tab.active{display:block}.card{background:#121a11;border:1px solid #2e4a2e;border-radius:14px;padding:14px;margin-bottom:12px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px}input,select{background:#0a0d0a;color:#f3f3ee;border:1px solid #3a5a3a;border-radius:8px;padding:10px;width:100%;box-sizing:border-box}.field{display:flex;flex-direction:column;gap:5px}.field label,.muted{color:#9fb39a}.row{display:flex;gap:8px;flex-wrap:wrap}.result{padding:12px;border:1px solid #2e4a2e;border-radius:10px;margin:8px 0}.score{text-align:center;font-size:34px;font-weight:800;color:#d9a521}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px;border-bottom:1px solid #2e4a2e;text-align:left}th{color:#d9a521}.rating{font-size:26px;font-weight:800;color:#d9a521}.badge{display:inline-block;padding:4px 7px;border-radius:999px;background:#4a3a0f;color:#e8c968;font-size:11px}
 h2{color:#d9a521}h3{color:#f3f3ee}a{color:#d9a521}
 </style></head><body>
-<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v27 · Proper Rugby Match Search & Analysis · all teams</div></header>
+<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v28 · Proper Rugby Match Search & Analysis · all teams</div></header>
 <nav>
 <button type="button" data-tab="search">🔎 Find Match</button>
 <button type="button" data-tab="analysis">📊 Analysis</button>
@@ -15,10 +15,10 @@ h2{color:#d9a521}h3{color:#f3f3ee}a{color:#d9a521}
 <div class="field"><label>Team / nickname</label><input id="q" placeholder="South Africa, Springboks, Leicester..."></div>
 <div class="field"><label>Opponent (optional)</label><input id="opp" placeholder="e.g. Wales"></div>
 <div class="field"><label>Season</label><select id="season"><option value="">Any</option><option>2026</option><option>2025</option><option>2024</option><option>2023</option><option>2022</option></select></div>
-<div class="field"><label>Competition</label><input id="comp" placeholder="International Test Match, URC..."></div>
+<div class="field"><label>Competition</label><select id="comp"><option value="">Any</option></select></div>
 </div>
 <div class="row" style="margin-top:10px"><button type="button" id="btnFindTeam">Find Team</button><button type="button" id="btnStandings">🏆 Standings</button><button type="button" id="btnDemo">Demo</button></div>
-<p class="muted" style="font-size:11px">Standings uses the Competition field above (required) and Season (optional) - built from cached international match data, not an official league table, and doesn't include bonus points.</p>
+<p class="muted" style="font-size:11px">Standings uses the Competition dropdown above (required) and Season (optional) - search a team first so the dropdown fills with competitions it actually plays in. Built from cached international match data, not an official league table, and doesn't include bonus points.</p>
 </div>
 <div id="teams" class="card"><span class="muted">Enter a team name.</span></div>
 <div id="standings" class="card" style="display:none"></div>
@@ -181,7 +181,7 @@ function sourceLabel(source){
 // so a club standings table would need a different, more expensive lookup.
 function buildStandings(){
  let compVal=document.getElementById('comp').value.trim();
- if(!compVal){alert('Please type a competition name in the Competition field first.');return}
+ if(!compVal){alert('Please search a team first, then select a competition from the dropdown above.');return}
  let season=document.getElementById('season').value;
  let box=document.getElementById('standings');
  box.style.display='block';
@@ -296,11 +296,25 @@ function headToHeadHtml(all,opponentFilter){
   (last?'<br><span class="muted">Last: '+fmt(last.date)+' · '+(matchResult(last)==='W'?'Won':matchResult(last)==='L'?'Lost':'Drew')+' '+last.selfScore+'–'+last.oppScore+'</span>':'')+'</div>';
 }
 
+// Strips a trailing season year (e.g. "Six Nations 2026" -> "Six Nations")
+// so the dropdown shows one clean entry per competition rather than a
+// separate entry per year - the Season dropdown already handles the year.
+function cleanCompetitionLabel(c){
+ return String(c||'').replace(/\s+\d{4}$/,'').trim();
+}
+function populateCompetitionDropdown(all){
+ let sel=document.getElementById('comp');
+ let previous=sel.value;
+ let labels=Array.from(new Set(all.map(m=>cleanCompetitionLabel(m.competition)).filter(Boolean))).sort();
+ sel.innerHTML='<option value="">Any</option>'+labels.map(l=>'<option value="'+esc(l)+'">'+esc(l)+'</option>').join('');
+ sel.value=labels.includes(previous)?previous:'';
+}
+
 async function matches(sourcesJson,name){
  let box=document.getElementById('matches');box.style.display='block';box.innerHTML='<b>Loading matches for '+esc(name)+'…</b>';
  let sources;
  try{sources=JSON.parse(sourcesJson)}catch(e){sources=[]}
- let season=document.getElementById('season').value,comp=norm(document.getElementById('comp').value),opp=norm(document.getElementById('opp').value);
+ let season=document.getElementById('season').value,opp=norm(document.getElementById('opp').value);
  let all=[];
  await Promise.all(sources.map(async s=>{
   try{
@@ -313,6 +327,8 @@ async function matches(sourcesJson,name){
    all.push(...items);
   }catch(e){/* one source failing shouldn't block the others */}
  }));
+ populateCompetitionDropdown(all);
+ let comp=norm(document.getElementById('comp').value);
  let summary=formHtml(all)+headToHeadHtml(all,opp);
  let out=all.filter(m=>(!season||String(m.date||'').startsWith(season))&&(!comp||norm(m.competition).includes(comp))&&(!opp||norm(m.opponent).includes(opp)))
   .sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')));
@@ -592,7 +608,7 @@ function drawStatsChart(c,x){
  });
  x.textAlign='left';
 }
-function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v27.png';a.href=document.getElementById('cv').toDataURL();a.click()}
+function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v28.png';a.href=document.getElementById('cv').toDataURL();a.click()}
 
 // ---- wiring: everything below binds events with addEventListener instead
 // of inline onclick, including a single delegated listener for buttons
