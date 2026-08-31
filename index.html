@@ -1,8 +1,8 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0d0a"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v28</title><style>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0d0a"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v29</title><style>
 body{margin:0;font-family:system-ui;background:#0a0d0a;color:#f3f3ee}header{padding:16px;background:#0e130e;border-bottom:2px solid #1f6b3d}h1{margin:0;font-size:23px;color:#f3f3ee}.sub{color:#c9a227;font-size:12px}nav{display:flex;gap:7px;overflow:auto;padding:9px;background:#101710;position:sticky;top:0;border-bottom:1px solid #23361f}button{border:0;border-radius:9px;padding:10px 13px;background:#1f6b3d;color:#f9f6ea;font-weight:700}button:active{background:#164a2a}.tab{display:none;max-width:1100px;margin:auto;padding:14px}.tab.active{display:block}.card{background:#121a11;border:1px solid #2e4a2e;border-radius:14px;padding:14px;margin-bottom:12px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px}input,select{background:#0a0d0a;color:#f3f3ee;border:1px solid #3a5a3a;border-radius:8px;padding:10px;width:100%;box-sizing:border-box}.field{display:flex;flex-direction:column;gap:5px}.field label,.muted{color:#9fb39a}.row{display:flex;gap:8px;flex-wrap:wrap}.result{padding:12px;border:1px solid #2e4a2e;border-radius:10px;margin:8px 0}.score{text-align:center;font-size:34px;font-weight:800;color:#d9a521}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px;border-bottom:1px solid #2e4a2e;text-align:left}th{color:#d9a521}.rating{font-size:26px;font-weight:800;color:#d9a521}.badge{display:inline-block;padding:4px 7px;border-radius:999px;background:#4a3a0f;color:#e8c968;font-size:11px}
 h2{color:#d9a521}h3{color:#f3f3ee}a{color:#d9a521}
 </style></head><body>
-<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v28 · Proper Rugby Match Search & Analysis · all teams</div></header>
+<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v29 · Proper Rugby Match Search & Analysis · all teams</div></header>
 <nav>
 <button type="button" data-tab="search">🔎 Find Match</button>
 <button type="button" data-tab="analysis">📊 Analysis</button>
@@ -451,6 +451,11 @@ async function espnLoad(matchId){
    players:[]
   };
   players=[];
+  try{
+   let ps=await get(RAW_ESPN+'player-stats/'+e.event_id+'.json');
+   players=(ps.home||[]).map(p=>({name:p.name,team:current.home_team,stats:p.stats||{}}))
+    .concat((ps.away||[]).map(p=>({name:p.name,team:current.away_team,stats:p.stats||{}})));
+  }catch(err){/* player stats not cached for this match yet - that's OK */}
   render();tab('analysis');
   document.getElementById('swapNote').textContent='';
  }catch(err){alert('Could not load match: '+err.message)}
@@ -478,9 +483,43 @@ async function manualLoad(matchId){
  }catch(err){alert('Could not load match: '+err.message)}
 }
 
-function demo(){current={home_team:'South Africa',away_team:'New Zealand',date:'20260822',competition:'International Test Match',home_score:28,away_score:21,home:{tackles:128,territory:56,turnovers_won:8,turnovers_conceded:6,tries:3,metres_carried:612},away:{tackles:143,territory:44,turnovers_won:6,turnovers_conceded:8,tries:3,metres_carried:655},players:[{name:'Example Player',team:'South Africa',tackles:18,missed:1,metres:72,turnovers_won:3},{name:'Example Player 2',team:'New Zealand',tackles:19,missed:2,metres:55,turnovers_won:2}]};players=current.players;render();tab('analysis')}
+function demo(){current={home_team:'South Africa',away_team:'New Zealand',date:'20260822',competition:'International Test Match',home_score:28,away_score:21,home:{tackles:128,territory:56,turnovers_won:8,turnovers_conceded:6,tries:3,metres_carried:612},away:{tackles:143,territory:44,turnovers_won:6,turnovers_conceded:8,tries:3,metres_carried:655},players:[{name:'Example Player',team:'South Africa',stats:{tackles:18,missedTackles:1,metres:72,turnoversWon:3,tries:1}},{name:'Example Player 2',team:'New Zealand',stats:{tackles:19,missedTackles:2,metres:55,turnoversWon:2,tries:0}}]};players=current.players;render();tab('analysis')}
 
-function rating(p){let s=5;if(p.tackles!=null)s+=Math.min(2.5,p.tackles/12);if(p.missed!=null)s-=Math.min(1.5,p.missed/6);if(p.metres!=null)s+=Math.min(1.5,p.metres/100);if(p.turnovers_won!=null)s+=Math.min(1.5,p.turnovers_won*.5);return Math.max(0,Math.min(10,s))}
+// Finds a player stat by pattern rather than exact key name, since club
+// (demo), and ESPN player stats don't share one fixed naming convention -
+// same reasoning as the team stats table further up.
+function findPlayerStat(stats,mustMatch,mustNotMatch){
+ if(!stats)return null;
+ let k=Object.keys(stats).find(k=>mustMatch.test(k)&&(!mustNotMatch||!mustNotMatch.test(k)));
+ return k!=null?stats[k]:null;
+}
+function playerStatSet(p){
+ let s=p.stats||{};
+ return {
+  tackles:findPlayerStat(s,/tackle/i,/missed/i),
+  missed:findPlayerStat(s,/tackle/i,null)!=null?findPlayerStat(s,/missed.*tackle|tackle.*missed/i,null):null,
+  metres:findPlayerStat(s,/^metres$/i,null)??findPlayerStat(s,/metre/i,null),
+  tries:findPlayerStat(s,/^tries$/i,null),
+  turnovers:findPlayerStat(s,/turnover/i,/conceded|lost/i)
+ };
+}
+function rating(p){
+ let v=playerStatSet(p);
+ let s=5;
+ if(v.tackles!=null)s+=Math.min(2.5,v.tackles/12);
+ if(v.missed!=null)s-=Math.min(1.5,v.missed/6);
+ if(v.metres!=null)s+=Math.min(1.5,v.metres/100);
+ if(v.turnovers!=null)s+=Math.min(1.5,v.turnovers*.5);
+ if(v.tries!=null)s+=Math.min(1.5,v.tries*.75);
+ return Math.max(0,Math.min(10,s));
+}
+function renderPlayers(){
+ if(!players.length){document.getElementById('summary').innerHTML='No player-level data supplied.';document.getElementById('ptable').innerHTML='';return}
+ let s=players.map(p=>({...p,r:rating(p),v:playerStatSet(p)})).sort((a,b)=>b.r-a.r),top=s[0];
+ document.getElementById('summary').innerHTML='<div class="rating">'+esc(top.name)+' — '+top.r.toFixed(1)+'/10</div><span class="badge">Calculated RMS rating</span>';
+ document.getElementById('ptable').innerHTML='<table><tr><th>Player</th><th>Team</th><th>Tackles</th><th>Metres</th><th>Tries</th><th>Rating</th></tr>'+
+  s.map(p=>'<tr><td>'+esc(p.name)+'</td><td>'+esc(p.team)+'</td><td>'+(p.v.tackles??'—')+'</td><td>'+(p.v.metres??'—')+'</td><td>'+(p.v.tries??'—')+'</td><td><b>'+p.r.toFixed(1)+'</b></td></tr>').join('')+'</table>';
+}
 
 // Stats come straight from rugbypy's team-stats rows, whose exact column
 // set can vary/expand — so the table is built from whatever numeric
@@ -535,7 +574,6 @@ function render(){
  document.getElementById('stats').innerHTML=rows.length?('<div class="card"><table><tr><th>Statistic</th><th>'+esc(current.home_team)+'</th><th>'+esc(current.away_team)+'</th></tr>'+rows.map(r=>'<tr><td>'+esc(r[0])+'</td><td>'+esc(r[1])+'</td><td>'+esc(r[2])+'</td></tr>').join('')+'</table></div>'):'<div class="card muted">No box-score stats cached for this match yet — it may be too recent, check back after the next daily update.</div>';
  renderPlayers();
 }
-function renderPlayers(){if(!players.length){document.getElementById('summary').innerHTML='No player-level data supplied.';document.getElementById('ptable').innerHTML='';return}let s=players.map(p=>({...p,r:rating(p)})).sort((a,b)=>b.r-a.r),top=s[0];document.getElementById('summary').innerHTML='<div class="rating">'+esc(top.name)+' — '+top.r.toFixed(1)+'/10</div><span class="badge">Calculated RMS rating</span>';document.getElementById('ptable').innerHTML='<table><tr><th>Player</th><th>Team</th><th>Tackles</th><th>Metres</th><th>TO won</th><th>Rating</th></tr>'+s.map(p=>'<tr><td>'+esc(p.name)+'</td><td>'+esc(p.team)+'</td><td>'+(p.tackles??'—')+'</td><td>'+(p.metres??'—')+'</td><td>'+(p.turnovers_won??'—')+'</td><td><b>'+p.r.toFixed(1)+'</b></td></tr>').join('')+'</table>'}
 
 function graphic(type){
  let c=document.getElementById('cv'),x=c.getContext('2d');
@@ -608,7 +646,7 @@ function drawStatsChart(c,x){
  });
  x.textAlign='left';
 }
-function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v28.png';a.href=document.getElementById('cv').toDataURL();a.click()}
+function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v29.png';a.href=document.getElementById('cv').toDataURL();a.click()}
 
 // ---- wiring: everything below binds events with addEventListener instead
 // of inline onclick, including a single delegated listener for buttons
