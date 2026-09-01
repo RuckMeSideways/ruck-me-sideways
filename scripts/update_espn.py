@@ -218,8 +218,10 @@ def main():
                     "date": detail.get("date"),
                     "name": detail.get("name"),
                     "stats_fetched": False,
+                    "has_stats": False,
                 }
 
+                sides_with_stats = 0
                 for c in competitors:
                     home_away = c.get("homeAway")
                     team_ref = (c.get("team") or {}).get("$ref", "")
@@ -237,12 +239,23 @@ def main():
                     if stats_ref:
                         try:
                             stats = get_json(stats_ref.split("?")[0])
+                            # only count this side as "has stats" if it actually
+                            # contains at least one numeric stat, not just an
+                            # empty/near-empty response
+                            cats = ((stats or {}).get("splits") or {}).get("categories") or []
+                            has_numeric = any(
+                                isinstance(s.get("value"), (int, float))
+                                for cat in cats for s in (cat.get("stats") or [])
+                            )
                             save_json(MATCH_STATS_DIR / f"{eid}_{team_id}.json", stats)
+                            if has_numeric:
+                                sides_with_stats += 1
                         except Exception as e:
                             print(f"  ! failed fetching stats for event {eid} team {team_id}: {e}")
                         time.sleep(REQUEST_PAUSE_SECONDS)
 
                 entry["stats_fetched"] = True
+                entry["has_stats"] = sides_with_stats == 2
                 events_by_id[eid] = entry
                 processed_new += 1
                 if processed_new % 10 == 0:
