@@ -1,8 +1,8 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0d0a"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v31</title><style>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0d0a"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v32</title><style>
 body{margin:0;font-family:system-ui;background:#0a0d0a;color:#f3f3ee}header{padding:16px;background:#0e130e;border-bottom:2px solid #1f6b3d}h1{margin:0;font-size:23px;color:#f3f3ee}.sub{color:#c9a227;font-size:12px}nav{display:flex;gap:7px;overflow:auto;padding:9px;background:#101710;position:sticky;top:0;border-bottom:1px solid #23361f}button{border:0;border-radius:9px;padding:10px 13px;background:#1f6b3d;color:#f9f6ea;font-weight:700}button:active{background:#164a2a}.tab{display:none;max-width:1100px;margin:auto;padding:14px}.tab.active{display:block}.card{background:#121a11;border:1px solid #2e4a2e;border-radius:14px;padding:14px;margin-bottom:12px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px}input,select{background:#0a0d0a;color:#f3f3ee;border:1px solid #3a5a3a;border-radius:8px;padding:10px;width:100%;box-sizing:border-box}.field{display:flex;flex-direction:column;gap:5px}.field label,.muted{color:#9fb39a}.row{display:flex;gap:8px;flex-wrap:wrap}.result{padding:12px;border:1px solid #2e4a2e;border-radius:10px;margin:8px 0}.score{text-align:center;font-size:34px;font-weight:800;color:#d9a521}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px;border-bottom:1px solid #2e4a2e;text-align:left}th{color:#d9a521}.rating{font-size:26px;font-weight:800;color:#d9a521}.badge{display:inline-block;padding:4px 7px;border-radius:999px;background:#4a3a0f;color:#e8c968;font-size:11px}
 h2{color:#d9a521}h3{color:#f3f3ee}a{color:#d9a521}
 </style></head><body>
-<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v31 · Proper Rugby Match Search & Analysis · all teams</div></header>
+<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v32 · Proper Rugby Match Search & Analysis · all teams</div></header>
 <nav>
 <button type="button" data-tab="search">🔎 Find Match</button>
 <button type="button" data-tab="analysis">📊 Analysis</button>
@@ -41,6 +41,17 @@ const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u03
 const get=async u=>{let r=await fetch(u);if(!r.ok)throw Error(r.status+' fetching '+u);return r.json()};
 const tab=id=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.getElementById(id).classList.add('active')};
 const fmt=d=>{let s=String(d||'');if(s.includes('T'))return s.slice(0,10);return s.length===8?s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6):s};
+// Whether a match has actually happened yet, based on its date rather than
+// its score - ESPN returns 0-0 for fixtures that haven't been played yet
+// (not null/blank), so checking "is there a score" alone can't tell a real
+// 0-0 draw apart from a match that just hasn't kicked off.
+function isPlayed(dateStr){
+ let d=fmt(dateStr);
+ if(!d)return true; // no date info at all - don't hide it, safer to show
+ let dt=new Date(d+'T00:00:00');
+ if(isNaN(dt.getTime()))return true; // unparseable - don't hide it
+ return dt.getTime()<=Date.now();
+}
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 async function loadRegistries(){
@@ -193,6 +204,7 @@ function buildStandings(){
   (INTL_MATCHES||[]).forEach(m=>{
    if(!norm(m.league?.name||'').includes(comp))return;
    if(season&&String(m.league?.season||'')!==season)return;
+   if(!isPlayed(m.date))return;
    let parts=String(m.state?.score||'').split(' - ').map(s=>parseInt(s.trim(),10));
    let hs=parts[0],as=parts[1];
    if(!Number.isFinite(hs)||!Number.isFinite(as))return;
@@ -201,6 +213,7 @@ function buildStandings(){
   (ESPN_EVENTS||[]).forEach(e=>{
    if(!norm(e.league_name||'').includes(comp))return;
    if(season&&!String(e.date||'').startsWith(season))return;
+   if(!isPlayed(e.date))return;
    if(typeof e.home_score!=='number'||typeof e.away_score!=='number')return;
    rows.push({home:e.home_team_name,away:e.away_team_name,homeScore:e.home_score,awayScore:e.away_score});
   });
@@ -343,6 +356,10 @@ async function matches(sourcesJson,name){
    all.push(...items);
   }catch(e){/* one source failing shouldn't block the others */}
  }));
+ // Only matches that have actually been played - see isPlayed() for why
+ // this can't just check "is there a score" (ESPN returns 0-0 for
+ // fixtures that haven't kicked off yet, not a blank/null score).
+ all=all.filter(m=>isPlayed(m.date));
  populateCompetitionDropdown(all);
  let comp=norm(document.getElementById('comp').value);
  let summary=formHtml(all)+headToHeadHtml(all,opp);
@@ -663,7 +680,7 @@ function drawStatsChart(c,x){
  });
  x.textAlign='left';
 }
-function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v31.png';a.href=document.getElementById('cv').toDataURL();a.click()}
+function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v32.png';a.href=document.getElementById('cv').toDataURL();a.click()}
 
 // ---- wiring: everything below binds events with addEventListener instead
 // of inline onclick, including a single delegated listener for buttons
