@@ -88,6 +88,7 @@ def main():
     players_cache = load_json(PLAYERS_FILE, {})  # athlete_id -> {name, position}
 
     new_stats_fetched = 0
+    events_changed = False
     match_stats_files = sorted(MATCH_STATS_DIR.glob("*.json"))
     print(f"Found {len(match_stats_files)} team match-stats file(s) to check.")
 
@@ -165,10 +166,20 @@ def main():
         if changed or result.get("home") or result.get("away"):
             save_json(out_path, result)
 
+        # Once both sides are fully fetched, record that on the shared
+        # events.json so the app can show "player stats available" for
+        # this match without needing to probe player-stats/ separately.
+        if result.get("home") is not None and result.get("away") is not None:
+            if event_id in events_by_id and not events_by_id[event_id].get("has_players"):
+                events_by_id[event_id]["has_players"] = True
+                events_changed = True
+
         if new_stats_fetched >= MAX_NEW_PLAYER_STATS_PER_RUN:
             break
 
     save_json(PLAYERS_FILE, players_cache)
+    if events_changed:
+        save_json(EVENTS_FILE, list(events_by_id.values()))
     print(f"Done. {new_stats_fetched} new player-match statistic(s) fetched this run. {len(players_cache)} unique player(s) known.")
 
 
