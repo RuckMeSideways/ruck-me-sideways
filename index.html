@@ -1,8 +1,8 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0d0a"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v29</title><style>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0d0a"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v30</title><style>
 body{margin:0;font-family:system-ui;background:#0a0d0a;color:#f3f3ee}header{padding:16px;background:#0e130e;border-bottom:2px solid #1f6b3d}h1{margin:0;font-size:23px;color:#f3f3ee}.sub{color:#c9a227;font-size:12px}nav{display:flex;gap:7px;overflow:auto;padding:9px;background:#101710;position:sticky;top:0;border-bottom:1px solid #23361f}button{border:0;border-radius:9px;padding:10px 13px;background:#1f6b3d;color:#f9f6ea;font-weight:700}button:active{background:#164a2a}.tab{display:none;max-width:1100px;margin:auto;padding:14px}.tab.active{display:block}.card{background:#121a11;border:1px solid #2e4a2e;border-radius:14px;padding:14px;margin-bottom:12px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px}input,select{background:#0a0d0a;color:#f3f3ee;border:1px solid #3a5a3a;border-radius:8px;padding:10px;width:100%;box-sizing:border-box}.field{display:flex;flex-direction:column;gap:5px}.field label,.muted{color:#9fb39a}.row{display:flex;gap:8px;flex-wrap:wrap}.result{padding:12px;border:1px solid #2e4a2e;border-radius:10px;margin:8px 0}.score{text-align:center;font-size:34px;font-weight:800;color:#d9a521}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px;border-bottom:1px solid #2e4a2e;text-align:left}th{color:#d9a521}.rating{font-size:26px;font-weight:800;color:#d9a521}.badge{display:inline-block;padding:4px 7px;border-radius:999px;background:#4a3a0f;color:#e8c968;font-size:11px}
 h2{color:#d9a521}h3{color:#f3f3ee}a{color:#d9a521}
 </style></head><body>
-<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v29 · Proper Rugby Match Search & Analysis · all teams</div></header>
+<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v30 · Proper Rugby Match Search & Analysis · all teams</div></header>
 <nav>
 <button type="button" data-tab="search">🔎 Find Match</button>
 <button type="button" data-tab="analysis">📊 Analysis</button>
@@ -235,7 +235,8 @@ async function fetchClubMatches(teamId){
  return teamStatsCache[teamId].map(r=>({
   source:'club',matchId:r.match_id,teamId,oppId:r.team_vs_id,
   opponent:r.team_vs,date:r.game_date,competition:compName(r.competition_id),
-  selfScore:r.score,oppScore:r.team_vs_score
+  selfScore:r.score,oppScore:r.team_vs_score,
+  hasStats:true,hasPlayers:false // rugbypy always includes a full box score; player-level stats aren't built for club data yet
  }));
 }
 async function fetchIntlMatches(teamId){
@@ -246,7 +247,9 @@ async function fetchIntlMatches(teamId){
    let parts=String(m.state?.score||'').split(' - ').map(s=>parseInt(s.trim(),10));
    let homeScore=Number.isFinite(parts[0])?parts[0]:null,awayScore=Number.isFinite(parts[1])?parts[1]:null;
    return {source:'intl',matchId:m.id,opponent:isHome?m.awayTeam?.name:m.homeTeam?.name,date:m.date,competition:(m.league?.name||'')+(m.league?.season?' '+m.league.season:''),
-    selfScore:isHome?homeScore:awayScore,oppScore:isHome?awayScore:homeScore};
+    selfScore:isHome?homeScore:awayScore,oppScore:isHome?awayScore:homeScore,
+    hasStats:false,hasPlayers:false // Highlightly only ever provides scores/fixtures, confirmed no box-score endpoint
+   };
   });
 }
 async function fetchEspnMatches(teamId){
@@ -255,7 +258,9 @@ async function fetchEspnMatches(teamId){
   .map(e=>{
    let isHome=String(e.home_team_id)===String(teamId);
    return {source:'espn',matchId:e.event_id,opponent:isHome?e.away_team_name:e.home_team_name,date:e.date,competition:e.league_name,
-    selfScore:isHome?e.home_score:e.away_score,oppScore:isHome?e.away_score:e.home_score};
+    selfScore:isHome?e.home_score:e.away_score,oppScore:isHome?e.away_score:e.home_score,
+    hasStats:!!e.has_stats,hasPlayers:!!e.has_players // set by the data bridges once actually confirmed present, not guessed
+   };
   });
 }
 async function fetchManualMatches(teamName){
@@ -264,8 +269,18 @@ async function fetchManualMatches(teamName){
   .map(m=>{
    let isHome=m.home_team===teamName;
    return {source:'manual',matchId:m.id,opponent:isHome?m.away_team:m.home_team,date:m.date,competition:m.competition||'',
-    selfScore:isHome?m.home_score:m.away_score,oppScore:isHome?m.away_score:m.home_score};
+    selfScore:isHome?m.home_score:m.away_score,oppScore:isHome?m.away_score:m.home_score,
+    hasStats:Object.keys(m.home||{}).length>0,hasPlayers:false // true only if stats were actually entered via the form
+   };
   });
+}
+
+// Short label for what to expect before tapping "Load Match" - built from
+// each match's own hasStats/hasPlayers flags rather than a guess.
+function availabilityLabel(m){
+ if(m.hasPlayers)return 'Score + match stats + players';
+ if(m.hasStats)return 'Score + match stats';
+ return 'Score only';
 }
 
 // Result: 'W'/'L'/'D', or null if either score is missing.
@@ -335,6 +350,7 @@ async function matches(sourcesJson,name){
  let list=out.length?('<h3>'+esc(name)+' matches ('+out.length+')</h3>'+out.slice(0,50).map(m=>
   '<div class="result"><b>'+esc(name)+' vs '+esc(m.opponent)+'</b><div class="muted">'+fmt(m.date)+' · '+esc(m.competition)+' · '+esc(sourceLabel(m.source))+
   (matchResult(m)?' · '+(m.selfScore)+'–'+(m.oppScore):'')+'</div>'+
+  '<div class="muted" style="font-size:11px">'+esc(availabilityLabel(m))+'</div>'+
   '<button type="button" class="btn-load-match" data-source="'+m.source+'" data-match-id="'+esc(m.matchId)+'" data-team-id="'+esc(m.teamId||'')+'" data-opp-id="'+esc(m.oppId||'')+'">Load Match</button></div>'
  ).join('')):'<p>No matches found for those filters.</p>';
  box.innerHTML=summary+list;
@@ -646,7 +662,7 @@ function drawStatsChart(c,x){
  });
  x.textAlign='left';
 }
-function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v29.png';a.href=document.getElementById('cv').toDataURL();a.click()}
+function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v30.png';a.href=document.getElementById('cv').toDataURL();a.click()}
 
 // ---- wiring: everything below binds events with addEventListener instead
 // of inline onclick, including a single delegated listener for buttons
