@@ -199,7 +199,15 @@ def main():
         print(f"  {len(event_ids)} event(s) found")
 
         for eid in event_ids:
-            if eid in events_by_id and events_by_id[eid].get("stats_fetched"):
+            already = events_by_id.get(eid)
+            # Only truly skip a cached event if it actually captured both
+            # scores - "stats_fetched" alone just means we attempted it,
+            # not that it succeeded. A one-off transient failure (e.g. the
+            # score endpoint request failing while the stats endpoint
+            # succeeded) would otherwise leave a match permanently stuck
+            # with a missing score, since it's marked done and never
+            # retried.
+            if already and already.get("stats_fetched") and already.get("home_score") is not None and already.get("away_score") is not None:
                 continue  # already fully processed in a previous run
             if processed_new >= MAX_NEW_EVENTS_PER_RUN:
                 continue  # budget hit for this run; will pick up next run
