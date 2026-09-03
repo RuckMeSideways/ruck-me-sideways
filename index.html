@@ -1,8 +1,8 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0d0a"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v32</title><style>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0a0d0a"><link rel="manifest" href="manifest.json"><title>Ruck Me Sideways v33</title><style>
 body{margin:0;font-family:system-ui;background:#0a0d0a;color:#f3f3ee}header{padding:16px;background:#0e130e;border-bottom:2px solid #1f6b3d}h1{margin:0;font-size:23px;color:#f3f3ee}.sub{color:#c9a227;font-size:12px}nav{display:flex;gap:7px;overflow:auto;padding:9px;background:#101710;position:sticky;top:0;border-bottom:1px solid #23361f}button{border:0;border-radius:9px;padding:10px 13px;background:#1f6b3d;color:#f9f6ea;font-weight:700}button:active{background:#164a2a}.tab{display:none;max-width:1100px;margin:auto;padding:14px}.tab.active{display:block}.card{background:#121a11;border:1px solid #2e4a2e;border-radius:14px;padding:14px;margin-bottom:12px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px}input,select{background:#0a0d0a;color:#f3f3ee;border:1px solid #3a5a3a;border-radius:8px;padding:10px;width:100%;box-sizing:border-box}.field{display:flex;flex-direction:column;gap:5px}.field label,.muted{color:#9fb39a}.row{display:flex;gap:8px;flex-wrap:wrap}.result{padding:12px;border:1px solid #2e4a2e;border-radius:10px;margin:8px 0}.score{text-align:center;font-size:34px;font-weight:800;color:#d9a521}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px;border-bottom:1px solid #2e4a2e;text-align:left}th{color:#d9a521}.rating{font-size:26px;font-weight:800;color:#d9a521}.badge{display:inline-block;padding:4px 7px;border-radius:999px;background:#4a3a0f;color:#e8c968;font-size:11px}
 h2{color:#d9a521}h3{color:#f3f3ee}a{color:#d9a521}
 </style></head><body>
-<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v32 · Proper Rugby Match Search & Analysis · all teams</div></header>
+<header><h1>🏉 Ruck Me Sideways</h1><div class="sub">v33 · Proper Rugby Match Search & Analysis · all teams</div></header>
 <nav>
 <button type="button" data-tab="search">🔎 Find Match</button>
 <button type="button" data-tab="analysis">📊 Analysis</button>
@@ -386,7 +386,16 @@ async function clubLoad(matchId,teamId,oppId){
   let details=null;
   try{details=await get(RAW+'match-details/'+matchId+'.json')}catch(e){/* not cached yet, that's OK */}
   if(!teamStatsCache[teamId]) teamStatsCache[teamId]=await get(RAW+'team-stats/'+teamId+'.json');
-  if(!teamStatsCache[oppId]) teamStatsCache[oppId]=await get(RAW+'team-stats/'+oppId+'.json');
+  // The opponent's own team-stats file is a bonus, not a requirement -
+  // some opponents (composite/invitational sides like a Lions warm-up
+  // squad, for example) may never get their own file generated, since
+  // they're not part of rugbypy's full tracked-team list. Everything we
+  // strictly need (score, own-side stats) already comes from teamId's
+  // file, which we know succeeded since this match was found there.
+  if(!teamStatsCache[oppId]){
+   try{teamStatsCache[oppId]=await get(RAW+'team-stats/'+oppId+'.json')}
+   catch(e){teamStatsCache[oppId]=[]/* missing opponent file - match still loads, just without their own-side stat breakdown */}
+  }
   let selfRow=teamStatsCache[teamId].find(r=>r.match_id===matchId);
   let oppRow=teamStatsCache[oppId].find(r=>r.match_id===matchId);
   let selfName=selfRow?.team,oppName=selfRow?.team_vs;
@@ -409,8 +418,8 @@ async function clubLoad(matchId,teamId,oppId){
    competition:details?.competition||compName(selfRow?.competition_id),
    home_score:homeIsSelf?selfScore:oppScore,
    away_score:homeIsSelf?oppScore:selfScore,
-   home:homeIsSelf?selfRow:oppRow,
-   away:homeIsSelf?oppRow:selfRow,
+   home:homeIsSelf?selfRow:(oppRow||{}),
+   away:homeIsSelf?(oppRow||{}):selfRow,
    players:[]
   };
   players=[];
@@ -680,7 +689,7 @@ function drawStatsChart(c,x){
  });
  x.textAlign='left';
 }
-function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v32.png';a.href=document.getElementById('cv').toDataURL();a.click()}
+function save(){let a=document.createElement('a');a.download='ruck-me-sideways-v33.png';a.href=document.getElementById('cv').toDataURL();a.click()}
 
 // ---- wiring: everything below binds events with addEventListener instead
 // of inline onclick, including a single delegated listener for buttons
