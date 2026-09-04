@@ -1,0 +1,25 @@
+# Place this file at: .github/workflows/pilot-player-transfers.yml
+# This is a one-off diagnostic, not a recurring bridge - manual trigger
+# only, no schedule, and it doesn't commit anything back to the repo.
+name: Pilot - player transfer tracking
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  pilot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install rugbypy
+        run: pip install rugbypy pandas
+
+      - name: Run pilot script
+        run: python scripts/pilot_player_transfers.py
