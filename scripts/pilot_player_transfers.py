@@ -22,7 +22,22 @@ import glob
 import json
 import random
 
-from rugbypy.player import fetch_all_players, fetch_player, fetch_player_stats
+import rugbypy.player as player_module
+
+# Discover what's actually in the module rather than guessing function
+# names - avoids the whole script dying on one wrong guess.
+available = [n for n in dir(player_module) if not n.startswith("_")]
+print(f"Functions/names available in rugbypy.player: {available}\n")
+
+fetch_all_players = getattr(player_module, "fetch_all_players", None)
+fetch_player_stats = getattr(player_module, "fetch_player_stats", None)
+# fetch_player() turned out not to exist - try a couple of plausible
+# alternates without letting any single wrong guess stop the script.
+fetch_player_search = (
+    getattr(player_module, "fetch_player", None)
+    or getattr(player_module, "search_player", None)
+    or getattr(player_module, "fetch_players", None)
+)
 
 
 def df_to_records(df):
@@ -60,41 +75,50 @@ def main():
     print(f"Sampling {len(sample_player_ids)} player id(s): {sample_player_ids}")
 
     # 2. The key test: fetch_player_stats with NO date - full history, or empty/error?
-    for pid in sample_player_ids:
-        print(f"\n=== Player {pid}: fetch_player_stats(player_id={pid!r}), no date ===")
-        try:
-            df = fetch_player_stats(player_id=pid)
-            records = df_to_records(df)
-            print(f"  {len(records)} row(s) returned")
-            if records:
-                print(f"  columns: {list(records[0].keys())}")
-                print(f"  first row: {json.dumps(records[0], default=str)}")
-                if len(records) > 1:
-                    print(f"  last row:  {json.dumps(records[-1], default=str)}")
-        except Exception as e:
-            print(f"  ! failed: {e}")
+    if fetch_player_stats is None:
+        print("\n! fetch_player_stats not found in rugbypy.player - skipping this test.")
+    else:
+        for pid in sample_player_ids:
+            print(f"\n=== Player {pid}: fetch_player_stats(player_id={pid!r}), no date ===")
+            try:
+                df = fetch_player_stats(player_id=pid)
+                records = df_to_records(df)
+                print(f"  {len(records)} row(s) returned")
+                if records:
+                    print(f"  columns: {list(records[0].keys())}")
+                    print(f"  first row: {json.dumps(records[0], default=str)}")
+                    if len(records) > 1:
+                        print(f"  last row:  {json.dumps(records[-1], default=str)}")
+            except Exception as e:
+                print(f"  ! failed: {e}")
 
     # 3. The player manifest / search functions - needed for a "search a
     # player by name" feature, and to resolve a player_id to a real name.
     print("\n=== fetch_all_players() ===")
-    try:
-        df = fetch_all_players()
-        records = df_to_records(df)
-        print(f"  {len(records)} player(s) in manifest")
-        if records:
-            print(f"  columns: {list(records[0].keys())}")
-            print(f"  sample: {json.dumps(records[0], default=str)}")
-    except Exception as e:
-        print(f"  ! failed: {e}")
+    if fetch_all_players is None:
+        print("  ! fetch_all_players not found in rugbypy.player")
+    else:
+        try:
+            df = fetch_all_players()
+            records = df_to_records(df)
+            print(f"  {len(records)} player(s) in manifest")
+            if records:
+                print(f"  columns: {list(records[0].keys())}")
+                print(f"  sample: {json.dumps(records[0], default=str)}")
+        except Exception as e:
+            print(f"  ! failed: {e}")
 
-    print("\n=== fetch_player(name='Antoine Dupont') ===")
-    try:
-        df = fetch_player(name="Antoine Dupont")
-        records = df_to_records(df)
-        print(f"  {len(records)} result(s)")
-        print(f"  {json.dumps(records[:3], default=str)}")
-    except Exception as e:
-        print(f"  ! failed: {e}")
+    print("\n=== player name search ===")
+    if fetch_player_search is None:
+        print("  ! no name-search function found under any of the guessed names")
+    else:
+        try:
+            df = fetch_player_search(name="Antoine Dupont")
+            records = df_to_records(df)
+            print(f"  {len(records)} result(s)")
+            print(f"  {json.dumps(records[:3], default=str)}")
+        except Exception as e:
+            print(f"  ! failed: {e}")
 
     print("\nDone. Review the output above before deciding what to build next.")
 
