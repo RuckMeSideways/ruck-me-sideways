@@ -1,0 +1,42 @@
+# Place this file at: .github/workflows/update-players.yml
+# No secret required. Reads data/team-stats/*.json, so update_data.py
+# should have already run at least once.
+name: Update player history
+
+on:
+  schedule:
+    - cron: '15 7 * * *'   # daily, 07:15 UTC
+  workflow_dispatch: {}     # lets you trigger it manually from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  update-players:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install rugbypy
+        run: pip install rugbypy pandas
+
+      - name: Fetch player history
+        run: python scripts/update_players.py
+
+      - name: Commit and push if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/players/
+          if git diff --cached --quiet; then
+            echo "No player data changes"
+          else
+            git commit -m "Update player history $(date -u +'%Y-%m-%d')"
+            git push
+          fi
