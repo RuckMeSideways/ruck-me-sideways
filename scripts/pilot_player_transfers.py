@@ -31,13 +31,7 @@ print(f"Functions/names available in rugbypy.player: {available}\n")
 
 fetch_all_players = getattr(player_module, "fetch_all_players", None)
 fetch_player_stats = getattr(player_module, "fetch_player_stats", None)
-# fetch_player() turned out not to exist - try a couple of plausible
-# alternates without letting any single wrong guess stop the script.
-fetch_player_search = (
-    getattr(player_module, "fetch_player", None)
-    or getattr(player_module, "search_player", None)
-    or getattr(player_module, "fetch_players", None)
-)
+fetch_player_id = getattr(player_module, "fetch_player_id", None)
 
 
 def df_to_records(df):
@@ -75,6 +69,8 @@ def main():
     print(f"Sampling {len(sample_player_ids)} player id(s): {sample_player_ids}")
 
     # 2. The key test: fetch_player_stats with NO date - full history, or empty/error?
+    # Print EVERY row (not just first/last) so a genuine transfer, if one
+    # exists in the sample, is actually visible.
     if fetch_player_stats is None:
         print("\n! fetch_player_stats not found in rugbypy.player - skipping this test.")
     else:
@@ -86,9 +82,15 @@ def main():
                 print(f"  {len(records)} row(s) returned")
                 if records:
                     print(f"  columns: {list(records[0].keys())}")
-                    print(f"  first row: {json.dumps(records[0], default=str)}")
-                    if len(records) > 1:
-                        print(f"  last row:  {json.dumps(records[-1], default=str)}")
+                    records_sorted = sorted(records, key=lambda r: str(r.get("game_date") or ""))
+                    teams_seen = []
+                    for r in records_sorted:
+                        line = f"    {r.get('game_date')} | team={r.get('team')} (id={r.get('team_id')}) vs {r.get('team_vs')} | competition={r.get('competition')}"
+                        print(line)
+                        if not teams_seen or teams_seen[-1] != r.get("team_id"):
+                            teams_seen.append(r.get("team_id"))
+                    print(f"  distinct team_id sequence over time: {teams_seen}")
+                    print(f"  {'>>> TRANSFER DETECTED <<<' if len(teams_seen) > 1 else 'No transfer visible in this sample'}")
             except Exception as e:
                 print(f"  ! failed: {e}")
 
@@ -108,15 +110,13 @@ def main():
         except Exception as e:
             print(f"  ! failed: {e}")
 
-    print("\n=== player name search ===")
-    if fetch_player_search is None:
-        print("  ! no name-search function found under any of the guessed names")
+    print("\n=== player search via fetch_player_id ===")
+    if fetch_player_id is None:
+        print("  ! fetch_player_id not found in rugbypy.player")
     else:
         try:
-            df = fetch_player_search(name="Antoine Dupont")
-            records = df_to_records(df)
-            print(f"  {len(records)} result(s)")
-            print(f"  {json.dumps(records[:3], default=str)}")
+            result = fetch_player_id(name="Antoine Dupont")
+            print(f"  raw result: {json.dumps(result, default=str)}")
         except Exception as e:
             print(f"  ! failed: {e}")
 
